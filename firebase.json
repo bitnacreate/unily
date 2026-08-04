@@ -1,14 +1,22 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
     "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
-      "index.html",
       "beforeeditingmessage.html",
-      "firestore.indexes.json",
-      "firestore.rules"
+      "index.html",
+      ".git/**",
+      ".claude/**",
+      ".agents/**",
+      ".qodo/**",
+      ".firebase/**",
+      "skills-lock.json"
     ],
     "rewrites": [
       {
