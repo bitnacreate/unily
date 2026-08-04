@@ -2,3 +2,8 @@ index.html
 beforeeditingmessage.html
 firestore.indexes.json
 firestore.rules
+.agents/
+.claude/
+.qodo/
+.firebase/
+skills-lock.json
