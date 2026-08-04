@@ -4039,13 +4039,29 @@
         // CommunityService: 지금은 COMMUNITY_POSTS 배열을 Promise로 감싸 반환하지만,
         // 호출부(render 함수들)는 이 함수 이름/파라미터만 알고 있으면 되므로
         // 나중에 실제 API(fetch)로 바꿔도 render 쪽 코드는 수정할 필요가 없다.
+        // 실제 로그인 유저가 작성한 게시물/댓글인지 판별한다 (CommunityService와 카드 렌더링 함수 양쪽에서 사용).
+        // - 실제(Firestore) 데이터: authorUid를 현재 로그인한 Firebase 유저와 비교
+        // - 목업(로컬) 데이터: 기존처럼 authorId === 'me' 문자열로 판별
+        function isMine(item) {
+            if (!item) return false;
+            if (item.isReal) return !!(window.__myUid && item.authorUid && window.__myUid() === item.authorUid);
+            return item.authorId === 'me';
+        }
+
         const CommunityService = (function () {
             function withDelay(value, ms = 120) {
                 return new Promise(resolve => setTimeout(() => resolve(value), ms));
             }
+
+            // 목업 게시물(COMMUNITY_POSTS)과 실제 Firestore 게시물(window.__REAL_POSTS)을 합쳐서 반환.
+            // 앱의 나머지 코드는 전부 CommunityService만 거쳐서 게시물을 읽으므로,
+            // 여기서만 합쳐주면 피드/상세/마이페이지 등 모든 화면에 자동으로 반영된다.
+            function allPosts() { return [...(window.__REAL_POSTS || []), ...COMMUNITY_POSTS]; }
+            function findPost(postId) { return allPosts().find(p => p.id === postId); }
+
             function getCategories() { return withDelay(COMMUNITY_CATEGORIES); }
             function getPosts({ categoryKey, sort, query } = {}) {
-                let list = COMMUNITY_POSTS.slice();
+                let list = allPosts();
                 if (categoryKey) list = list.filter(p => p.categoryKey === categoryKey);
                 if (query) {
                     const q = query.toLowerCase();
@@ -4062,17 +4078,33 @@
                 return withDelay(list);
             }
             function createPost(data) {
+                // Firebase(구글) 로그인 상태면 Firestore에 실제로 저장 → 실시간 리스너가
+                // window.__REAL_POSTS에 반영하고 화면을 다시 그려준다 (아래 낙관적 삽입 없음).
+                if (window.__fbCreatePost && window.__myUid && window.__myUid()) {
+                    return window.__fbCreatePost(data).then(() => data);
+                }
+                // 로컬 목업 로그인 상태면 기존처럼 로컬 배열에만 추가.
                 COMMUNITY_POSTS.unshift(data);
                 return withDelay(data);
             }
             function likePost(postId, liked) {
-                const post = COMMUNITY_POSTS.find(p => p.id === postId);
-                if (post) post.likes = Math.max(0, post.likes + (liked ? 1 : -1));
+                const post = findPost(postId);
+                if (!post) return withDelay(null);
+                if (post.isReal && window.__fbLikePost) {
+                    window.__fbLikePost(postId, liked ? 1 : -1).catch(err => console.error('좋아요 동기화 실패:', err));
+                }
+                post.likes = Math.max(0, post.likes + (liked ? 1 : -1));
                 return withDelay(post);
             }
             function createComment(postId, comment, parentCommentId) {
-                const post = COMMUNITY_POSTS.find(p => p.id === postId);
+                const post = findPost(postId);
                 if (!post) return withDelay(null);
+                if (post.isReal) {
+                    comment = { ...comment, isReal: true, authorUid: window.__myUid ? window.__myUid() : null };
+                    if (window.__fbAddComment) {
+                        window.__fbAddComment(postId, comment, parentCommentId).catch(err => console.error('댓글 동기화 실패:', err));
+                    }
+                }
                 if (parentCommentId) {
                     const parent = findCommentById(post, parentCommentId);
                     if (parent) parent.replies = [...(parent.replies || []), comment];
@@ -4082,9 +4114,13 @@
                 return withDelay(comment);
             }
             function likeComment(postId, commentId, liked) {
-                const post = COMMUNITY_POSTS.find(p => p.id === postId);
+                const post = findPost(postId);
                 const comment = post ? findCommentById(post, commentId) : null;
-                if (comment) comment.likes = Math.max(0, comment.likes + (liked ? 1 : -1));
+                if (!comment) return withDelay(null);
+                if (post.isReal && window.__fbLikeComment) {
+                    window.__fbLikeComment(postId, commentId, liked ? 1 : -1).catch(err => console.error('댓글 좋아요 동기화 실패:', err));
+                }
+                comment.likes = Math.max(0, comment.likes + (liked ? 1 : -1));
                 return withDelay(comment);
             }
             function reportContent(type, id, reason, postId) {
@@ -4119,19 +4155,22 @@
 
             // ---- 게시글 상세 화면에서 사용하는 서비스 메서드 ----
             function getPostDetail(postId) {
-                return withDelay(COMMUNITY_POSTS.find(p => p.id === postId) || null);
+                return withDelay(findPost(postId) || null);
             }
             function getComments(postId) {
-                const post = COMMUNITY_POSTS.find(p => p.id === postId);
+                const post = findPost(postId);
                 return withDelay(post ? (post.comments || []) : []);
             }
             function getRelatedPosts(categoryKey, excludePostId, limit = 6) {
-                const list = COMMUNITY_POSTS.filter(p => p.categoryKey === categoryKey && p.id !== excludePostId).slice(0, limit);
+                const list = allPosts().filter(p => p.categoryKey === categoryKey && p.id !== excludePostId).slice(0, limit);
                 return withDelay(list);
             }
             function deleteComment(postId, commentId) {
-                const post = COMMUNITY_POSTS.find(p => p.id === postId);
+                const post = findPost(postId);
                 if (post) {
+                    if (post.isReal && window.__fbDeleteComment) {
+                        window.__fbDeleteComment(postId, commentId).catch(err => console.error('댓글 삭제 동기화 실패:', err));
+                    }
                     post.comments = (post.comments || []).filter(c => c.id !== commentId);
                     post.comments.forEach(c => { c.replies = (c.replies || []).filter(r => r.id !== commentId); });
                 }
@@ -4153,15 +4192,16 @@
             }
 
             // ---- 마이페이지 "활동" 탭에서 사용하는 서비스 메서드 ----
+            // 항상 'me'로만 호출되므로(현재 로그인한 사람 기준), isMine()으로 판별한다.
             function getUserPosts(authorId) {
-                return withDelay(COMMUNITY_POSTS.filter(p => p.authorId === authorId).sort((a, b) => b.createdAt - a.createdAt));
+                return withDelay(allPosts().filter(p => isMine(p)).sort((a, b) => b.createdAt - a.createdAt));
             }
             function getUserComments(authorId) {
                 const result = [];
-                COMMUNITY_POSTS.forEach(p => {
+                allPosts().forEach(p => {
                     (p.comments || []).forEach(c => {
-                        if (c.authorId === authorId) result.push({ comment: c, post: p });
-                        (c.replies || []).forEach(r => { if (r.authorId === authorId) result.push({ comment: r, post: p }); });
+                        if (isMine(c)) result.push({ comment: c, post: p });
+                        (c.replies || []).forEach(r => { if (isMine(r)) result.push({ comment: r, post: p }); });
                     });
                 });
                 result.sort((a, b) => b.comment.createdAt - a.comment.createdAt);
@@ -4169,14 +4209,15 @@
             }
             function getSavedPosts() {
                 const ids = JSON.parse(localStorage.getItem('unily_community_saved') || '[]');
-                return withDelay(COMMUNITY_POSTS.filter(p => ids.includes(p.id)));
+                return withDelay(allPosts().filter(p => ids.includes(p.id)));
             }
 
             return {
                 getCategories, getPosts, createPost, likePost, createComment, likeComment,
                 reportContent, getTrendingTopics, getPopularStudents, getRecommendedCommunities,
                 getPostDetail, getComments, getRelatedPosts, deleteComment, savePost, isPostSaved, sharePost,
-                getUserPosts, getUserComments, getSavedPosts
+                getUserPosts, getUserComments, getSavedPosts,
+                getPostSync: findPost
             };
         })();
 
@@ -4277,7 +4318,7 @@
         // 본인이 쓴 댓글(authorId==='me')에는 삭제 버튼을 추가로 노출한다.
         function renderCommentHTML(comment, postId, isReply) {
             const author = students.find(s => s.id === comment.authorId);
-            const isMe = comment.authorId === 'me';
+            const isMe = isMine(comment);
             const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${author ? author.badgeGradient : 'var(--indigo)'};`;
             const avatarInitial = isMe ? (comment.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
             const displayName = isMe ? (comment.authorName || 'You') : (author ? author.name : 'Unknown');
@@ -4320,7 +4361,7 @@
 
         function renderPostCardHTML(post) {
             const author = students.find(s => s.id === post.authorId);
-            const isMe = post.authorId === 'me';
+            const isMe = isMine(post);
             const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${author ? author.badgeGradient : 'var(--indigo)'};`;
             const avatarInitial = isMe ? (post.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
             const displayName = isMe ? (post.authorName || 'You') : (author ? author.name : 'Unknown');
@@ -4553,8 +4594,13 @@
            ================================================================== */
         function openPostDetail(postId, focusComment) {
             currentDetailPostId = postId;
-            const post = COMMUNITY_POSTS.find(p => p.id === postId);
-            if (post) post.views += 1; // 상세 페이지 진입 시 1회 조회수 증가
+            const post = CommunityService.getPostSync(postId);
+            if (post) {
+                post.views = (post.views || 0) + 1; // 상세 페이지 진입 시 1회 조회수 증가
+                if (post.isReal && window.__fbIncrementViews) {
+                    window.__fbIncrementViews(postId).catch(err => console.error('조회수 동기화 실패:', err));
+                }
+            }
 
             showPage('post-detail');
             window.scrollTo({ top: 0, behavior: 'auto' });
@@ -4570,7 +4616,7 @@
                 if (!post) { showPage('community'); return; }
 
                 const author = students.find(s => s.id === post.authorId);
-                const isMe = post.authorId === 'me';
+                const isMe = isMine(post);
                 const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${author ? author.badgeGradient : 'var(--indigo)'};`;
                 const avatarInitial = isMe ? (post.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
                 const displayName = isMe ? (post.authorName || 'You') : (author ? author.name : 'Unknown');
@@ -4694,7 +4740,7 @@
         // 여러 화면에서 공유하는 작은 게시글 미리보기 카드.
         function postCardPreviewHTML(p) {
             const author = students.find(s => s.id === p.authorId);
-            const isMe = p.authorId === 'me';
+            const isMe = isMine(p);
             const title = isMe ? (p.title || p.body) : t(p.title || p.body);
             const metaLine = author ? `${author.flag} ${author.university}` : '';
             return `
@@ -5008,6 +5054,21 @@
 
             setInterval(realtimeTick, 30000);
         }
+
+        // Firestore posts 컬렉션이 실시간으로 바뀔 때(다른 유저의 새 글/댓글/좋아요 포함)
+        // 지금 보고 있는 화면에 맞춰 다시 그려준다. (module 스크립트의 onSnapshot에서 호출)
+        window.__onRealPostsChange = function () {
+            const communityPage = document.getElementById('page-community');
+            if (communityPage && communityPage.classList.contains('active')) {
+                try { renderFeed(false); } catch (err) { console.error(err); }
+                try { renderTrending(); } catch (err) { console.error(err); }
+            }
+            const detailPage = document.getElementById('page-post-detail');
+            if (currentDetailPostId && detailPage && detailPage.classList.contains('active')) {
+                try { renderPostDetail(); } catch (err) { console.error(err); }
+                try { renderDetailComments(); } catch (err) { console.error(err); }
+            }
+        };
     </script>
 
     <script type="module">
@@ -5024,7 +5085,14 @@
         doc,
         getDoc,
         setDoc,
+        addDoc,
+        updateDoc,
+        collection,
+        query,
+        orderBy,
+        onSnapshot,
         serverTimestamp,
+        increment,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
       // Your web app's Firebase configuration
@@ -5062,6 +5130,112 @@
             createdAt: serverTimestamp(),
           });
         }
+      };
+
+      // 현재 로그인한 Firebase 유저의 uid (미로그인 시 null). CommunityService의 isMine() 판별에 사용.
+      window.__myUid = function () {
+        return auth.currentUser ? auth.currentUser.uid : null;
+      };
+
+      /* ==================================================================
+         실제 게시물/댓글 (Firestore posts 컬렉션)
+         - window.__REAL_POSTS: 실시간으로 동기화되는 실제 게시물 배열.
+           CommunityService(위쪽 클래식 스크립트)가 이 배열을 목업 데이터와 합쳐서 사용한다.
+         - window.__fbCreatePost / __fbLikePost / __fbAddComment / __fbLikeComment / __fbDeleteComment:
+           CommunityService가 실제 게시물에 대한 쓰기 작업을 위임하는 창구.
+         ================================================================== */
+      const postsCol = collection(db, "posts");
+      window.__REAL_POSTS = [];
+
+      function toMillis(ts) {
+        return ts && typeof ts.toMillis === "function" ? ts.toMillis() : Date.now();
+      }
+
+      onSnapshot(query(postsCol, orderBy("createdAt", "desc")), (snap) => {
+        window.__REAL_POSTS = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            ...data,
+            id: d.id,
+            isReal: true,
+            createdAt: toMillis(data.createdAt),
+            comments: (data.comments || []).map((c) => ({ ...c, isReal: true })),
+          };
+        });
+        if (typeof window.__onRealPostsChange === "function") window.__onRealPostsChange();
+      });
+
+      window.__fbCreatePost = async function (post) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        await addDoc(postsCol, {
+          authorUid: auth.currentUser.uid,
+          authorName: post.authorName,
+          authorInitial: post.authorInitial,
+          lang: post.lang,
+          categoryKey: post.categoryKey,
+          title: post.title,
+          body: post.body,
+          tags: post.tags || [],
+          image: post.image || null,
+          likes: 0,
+          views: 0,
+          createdAt: serverTimestamp(),
+          comments: [],
+        });
+      };
+
+      window.__fbLikePost = function (postId, delta) {
+        return updateDoc(doc(db, "posts", postId), { likes: increment(delta) });
+      };
+
+      window.__fbIncrementViews = function (postId) {
+        return updateDoc(doc(db, "posts", postId), { views: increment(1) });
+      };
+
+      // 댓글/답글은 게시물 문서 안의 배열 필드라서, 통째로 읽고 수정한 뒤 다시 써준다.
+      async function mutateComments(postId, mutator) {
+        const ref = doc(db, "posts", postId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const comments = snap.data().comments || [];
+        mutator(comments);
+        await updateDoc(ref, { comments });
+      }
+
+      window.__fbAddComment = function (postId, comment, parentCommentId) {
+        const plainComment = { ...comment };
+        delete plainComment.isReal;
+        return mutateComments(postId, (comments) => {
+          if (parentCommentId) {
+            const parent = comments.find((c) => c.id === parentCommentId);
+            if (parent) {
+              parent.replies = parent.replies || [];
+              parent.replies.push(plainComment);
+            }
+          } else {
+            comments.push(plainComment);
+          }
+        });
+      };
+
+      window.__fbLikeComment = function (postId, commentId, delta) {
+        return mutateComments(postId, (comments) => {
+          for (const c of comments) {
+            if (c.id === commentId) { c.likes = Math.max(0, (c.likes || 0) + delta); return; }
+            for (const r of c.replies || []) {
+              if (r.id === commentId) { r.likes = Math.max(0, (r.likes || 0) + delta); return; }
+            }
+          }
+        });
+      };
+
+      window.__fbDeleteComment = function (postId, commentId) {
+        return mutateComments(postId, (comments) => {
+          const filtered = comments.filter((c) => c.id !== commentId);
+          filtered.forEach((c) => { c.replies = (c.replies || []).filter((r) => r.id !== commentId); });
+          comments.length = 0;
+          comments.push(...filtered);
+        });
       };
     </script>
 
