@@ -5552,7 +5552,7 @@
       import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-analytics.js";
       import {
         initializeAppCheck,
-        ReCaptchaV3Provider,
+        ReCaptchaEnterpriseProvider,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app-check.js";
       import {
         getAuth,
@@ -5606,21 +5606,18 @@
          원래 공개되어도 되는 값이지만(구글 web API key는 비밀값이 아님, 진짜 보호는 Security
          Rules + App Check가 함), App Check 없이는 "누가 요청했는지"까지는 검증 못 한다.
 
-         활성화 방법 (코드 준비 완료, 아래 키만 채우면 다음 배포부터 자동 적용됨):
-         1) https://console.cloud.google.com/security/recaptcha 에서 reCAPTCHA v3 키 생성
-            - 등록 도메인: unily-e973f.web.app, unily-e973f.firebaseapp.com (+ 로컬 테스트용 localhost)
-         2) https://console.firebase.google.com/project/unily-e973f/appcheck 에서
-            위에서 만든 사이트 키로 웹 앱을 App Check에 등록
-         3) 아래 APP_CHECK_SITE_KEY에 그 사이트 키를 붙여넣고 배포
-         4) 마지막으로, 같은 Firebase 콘솔의 App Check 화면에서 Firestore와 AI Logic(Gemini) 각각에
-            "적용(Enforce)" 버튼을 눌러야 실제로 미등록 도메인의 요청이 차단되기 시작한다.
-            (이 마지막 단계는 콘솔에서만 가능해서 코드로 대신할 수 없음 - 3단계까지 끝나면 알려주면
-             같이 확인하면서 진행 가능)
-         키가 비어있는 지금은 App Check가 아예 초기화되지 않아 기존 동작에 영향 없음(안전한 기본값). ================================================================== */
-      const APP_CHECK_SITE_KEY = "";
+         reCAPTCHA Enterprise 키(console.cloud.google.com/security/recaptcha에서 생성) 등록 완료.
+
+         남은 단계:
+         Firebase 콘솔(console.firebase.google.com/project/unily-e973f/appcheck)에서
+         이 사이트 키로 웹 앱을 App Check에 등록 → 그 다음 Firestore/AI Logic 각각에
+         "적용(Enforce)" 버튼을 눌러야 실제로 미등록 도메인의 요청이 차단되기 시작한다.
+         (이 단계는 콘솔에서만 가능해서 코드로 대신할 수 없음)
+         ================================================================== */
+      const APP_CHECK_SITE_KEY = "6LdEvXYtAAAAAGUiu37Iyph6LOnN1OwyTVDOwVKy";
       if (APP_CHECK_SITE_KEY) {
         initializeAppCheck(app, {
-          provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+          provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
           isTokenAutoRefreshEnabled: true,
         });
       }
