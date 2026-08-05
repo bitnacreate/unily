@@ -2462,6 +2462,7 @@
         // Page Switching Logic
         function showPage(pageId) {
             const wasMessages = isMessagesPageActive();
+            const wasPostDetail = !!document.getElementById('page-post-detail')?.classList.contains('active');
 
             document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
@@ -2483,6 +2484,12 @@
             // 메시지 화면으로 들어오면 대화 목록 구독을 시작한다 (개별 채팅방 구독은 selectChat에서 시작).
             if (pageId === 'messages' && window.__subscribeChatList) {
                 window.__subscribeChatList();
+            }
+
+            // 게시글 상세 화면을 벗어나면 댓글 실시간 구독도 해제한다 (같은 상세 화면 안에서
+            // 다른 게시글로 이동하는 경우는 openPostDetail이 구독을 알아서 다시 시작하므로 여기선 안 건드림).
+            if (wasPostDetail && pageId !== 'post-detail') {
+                if (window.__unsubscribePostComments) window.__unsubscribePostComments();
             }
         }
 
@@ -4260,14 +4267,22 @@
             { id: 'p15', authorId: 16, lang: 'zh-CN', categoryKey: 'general', title: '刚加入Unily,大家好!', body: '刚加入Unily,很高兴认识大家!希望能找到一起做项目的朋友。', tags: ['General', 'NewHere'], likes: 6, views: 40, createdAt: MOCK_NOW - 5 * 86400000, comments: [] }
         ];
 
+        // 실제(Firestore) 게시글은 댓글이 더 이상 post.comments 배열에 없어서(서브컬렉션으로 분리됨),
+        // 비정규화된 commentCount 필드를 쓴다. 목업 게시글은 예전처럼 배열 길이를 센다.
         function countPostComments(post) {
+            if (post.isReal) return post.commentCount || 0;
             return (post.comments || []).reduce((sum, c) => sum + 1 + ((c.replies || []).length), 0);
         }
         function trendingScore(post) {
             const ageHours = (Date.now() - post.createdAt) / 3600000;
             return post.likes * 2 + countPostComments(post) * 3 - ageHours * 0.4;
         }
+        // 실제 게시글의 댓글은 post 객체가 아니라 지금 구독 중인 window.__REAL_POST_COMMENTS(평면 목록,
+        // parentCommentId로 답글 표시)에서 찾는다. 목업 게시글은 예전처럼 post.comments/.replies에서 찾는다.
         function findCommentById(post, commentId) {
+            if (post.isReal) {
+                return (window.__REAL_POST_COMMENTS || []).find(c => c.id === commentId) || null;
+            }
             for (const c of post.comments || []) {
                 if (c.id === commentId) return c;
                 for (const r of c.replies || []) if (r.id === commentId) return r;
@@ -4448,10 +4463,12 @@
                 const post = findPost(postId);
                 if (!post) return withDelay(null);
                 if (post.isReal) {
-                    comment = { ...comment, isReal: true, authorUid: window.__myUid ? window.__myUid() : null };
+                    // 실제 글: Firestore 서브컬렉션에 쓰기만 하고, 실시간 구독(onPostCommentsChange)이
+                    // 화면 갱신을 맡는다 - createPost가 window.__REAL_POSTS에 낙관적 반영을 안 하는 것과 동일한 패턴.
                     if (window.__fbAddComment) {
                         window.__fbAddComment(postId, comment, parentCommentId).catch(err => console.error('댓글 동기화 실패:', err));
                     }
+                    return withDelay(comment);
                 }
                 if (parentCommentId) {
                     const parent = findCommentById(post, parentCommentId);
@@ -4465,8 +4482,12 @@
                 const post = findPost(postId);
                 const comment = post ? findCommentById(post, commentId) : null;
                 if (!comment) return withDelay(null);
-                if (post.isReal && window.__fbLikeComment) {
-                    window.__fbLikeComment(postId, commentId, liked ? 1 : -1).catch(err => console.error('댓글 좋아요 동기화 실패:', err));
+                if (post.isReal) {
+                    // 실시간 구독 값이라 로컬로 미리 바꿔봤자 다음 스냅샷에 덮어써지므로, 그냥 서버만 갱신한다.
+                    if (window.__fbLikeComment) {
+                        window.__fbLikeComment(postId, commentId, liked ? 1 : -1).catch(err => console.error('댓글 좋아요 동기화 실패:', err));
+                    }
+                    return withDelay(comment);
                 }
                 comment.likes = Math.max(0, comment.likes + (liked ? 1 : -1));
                 return withDelay(comment);
@@ -4496,8 +4517,11 @@
                 const post = findPost(postId);
                 const comment = post ? findCommentById(post, commentId) : null;
                 if (!comment) return withDelay(null);
-                if (post.isReal && window.__fbUpdateComment) {
-                    window.__fbUpdateComment(postId, commentId, newText).catch(err => console.error('댓글 수정 동기화 실패:', err));
+                if (post.isReal) {
+                    if (window.__fbUpdateComment) {
+                        window.__fbUpdateComment(postId, commentId, newText).catch(err => console.error('댓글 수정 동기화 실패:', err));
+                    }
+                    return withDelay(comment);
                 }
                 comment.text = newText;
                 return withDelay(comment);
@@ -4551,9 +4575,19 @@
             function getPostDetail(postId) {
                 return withDelay(findPost(postId) || null);
             }
+            // 실제 글은 지금 구독 중인 평면 목록(window.__REAL_POST_COMMENTS)을 parentCommentId 기준으로
+            // 트리(최상위 댓글 + 그 안의 replies)로 조립해서 돌려준다 - renderCommentHTML이 기대하는 모양 그대로.
             function getComments(postId) {
                 const post = findPost(postId);
-                return withDelay(post ? (post.comments || []) : []);
+                if (!post) return withDelay([]);
+                if (post.isReal) {
+                    const flat = window.__REAL_POST_COMMENTS || [];
+                    const topLevel = flat
+                        .filter(c => !c.parentCommentId)
+                        .map(c => ({ ...c, replies: flat.filter(r => r.parentCommentId === c.id) }));
+                    return withDelay(topLevel);
+                }
+                return withDelay(post.comments || []);
             }
             function getRelatedPosts(categoryKey, excludePostId, limit = 6) {
                 const list = allPosts().filter(p => p.categoryKey === categoryKey && p.id !== excludePostId).slice(0, limit);
@@ -4562,11 +4596,14 @@
             function deleteComment(postId, commentId) {
                 const post = findPost(postId);
                 if (post) {
-                    if (post.isReal && window.__fbDeleteComment) {
-                        window.__fbDeleteComment(postId, commentId).catch(err => console.error('댓글 삭제 동기화 실패:', err));
+                    if (post.isReal) {
+                        if (window.__fbDeleteComment) {
+                            window.__fbDeleteComment(postId, commentId).catch(err => console.error('댓글 삭제 동기화 실패:', err));
+                        }
+                    } else {
+                        post.comments = (post.comments || []).filter(c => c.id !== commentId);
+                        post.comments.forEach(c => { c.replies = (c.replies || []).filter(r => r.id !== commentId); });
                     }
-                    post.comments = (post.comments || []).filter(c => c.id !== commentId);
-                    post.comments.forEach(c => { c.replies = (c.replies || []).filter(r => r.id !== commentId); });
                 }
                 return withDelay(true);
             }
@@ -4590,16 +4627,30 @@
             function getUserPosts(authorId) {
                 return withDelay(allPosts().filter(p => isMine(p)).sort((a, b) => b.createdAt - a.createdAt));
             }
+            // 목업 게시글의 댓글은 지금처럼 배열에서 바로 찾고, 실제 게시글의 댓글은 매 게시글마다
+            // 따로 구독할 수 없으니 collectionGroup 쿼리(1회성 조회)로 한 번에 가져와서 합친다.
             function getUserComments(authorId) {
-                const result = [];
-                allPosts().forEach(p => {
+                const localResult = [];
+                COMMUNITY_POSTS.forEach(p => {
                     (p.comments || []).forEach(c => {
-                        if (isMine(c)) result.push({ comment: c, post: p });
-                        (c.replies || []).forEach(r => { if (isMine(r)) result.push({ comment: r, post: p }); });
+                        if (isMine(c)) localResult.push({ comment: c, post: p });
+                        (c.replies || []).forEach(r => { if (isMine(r)) localResult.push({ comment: r, post: p }); });
                     });
                 });
-                result.sort((a, b) => b.comment.createdAt - a.comment.createdAt);
-                return withDelay(result);
+                const fetchReal = window.__fbFetchMyComments ? window.__fbFetchMyComments() : Promise.resolve([]);
+                return fetchReal.then(realComments => {
+                    const mapped = realComments.map(rc => ({
+                        comment: { id: rc.id, text: rc.text, createdAt: rc.createdAt },
+                        post: { id: rc.postId, title: rc.postTitle, body: rc.postBody }
+                    }));
+                    const combined = [...localResult, ...mapped];
+                    combined.sort((a, b) => b.comment.createdAt - a.comment.createdAt);
+                    return combined;
+                }).catch(err => {
+                    console.error('내 댓글 조회 실패:', err);
+                    localResult.sort((a, b) => b.comment.createdAt - a.comment.createdAt);
+                    return localResult;
+                });
             }
             function getSavedPosts() {
                 const ids = JSON.parse(localStorage.getItem('unily_community_saved') || '[]');
@@ -5013,6 +5064,14 @@
                 if (post.isReal && window.__fbIncrementViews) {
                     window.__fbIncrementViews(postId).catch(err => console.error('조회수 동기화 실패:', err));
                 }
+            }
+
+            // 실제 게시글의 댓글은 상세 화면을 여는 지금부터 구독을 시작한다 (같은 화면에서 다른
+            // 게시글로 넘어가는 경우도 이 함수가 다시 불려서 __subscribePostComments가 알아서 이전 구독을 정리함).
+            if (post && post.isReal && window.__subscribePostComments) {
+                window.__subscribePostComments(postId);
+            } else if (window.__unsubscribePostComments) {
+                window.__unsubscribePostComments();
             }
 
             showPage('post-detail');
@@ -5544,6 +5603,14 @@
                 try { renderChatArea(); } catch (err) { console.error(err); }
             }
         };
+
+        // 실제 게시글의 댓글 구독 내용이 바뀔 때(module 스크립트의 onSnapshot에서 호출)
+        window.__onPostCommentsChange = function () {
+            const detailPage = document.getElementById('page-post-detail');
+            if (currentDetailPostId && detailPage && detailPage.classList.contains('active')) {
+                try { renderDetailComments(); } catch (err) { console.error(err); }
+            }
+        };
     </script>
 
     <script type="module">
@@ -5564,11 +5631,13 @@
         getFirestore,
         doc,
         getDoc,
+        getDocs,
         setDoc,
         addDoc,
         updateDoc,
         deleteDoc,
         collection,
+        collectionGroup,
         query,
         where,
         orderBy,
@@ -5710,7 +5779,7 @@
             id: d.id,
             isReal: true,
             createdAt: toMillis(data.createdAt),
-            comments: (data.comments || []).map((c) => ({ ...c, isReal: true })),
+            commentCount: data.commentCount || 0,
           };
         });
         if (typeof window.__onRealPostsChange === "function") window.__onRealPostsChange();
@@ -5729,8 +5798,8 @@
           tags: post.tags || [],
           likes: 0,
           views: 0,
+          commentCount: 0,
           createdAt: serverTimestamp(),
-          comments: [],
         });
       };
 
@@ -5763,65 +5832,127 @@
         });
       };
 
-      window.__fbUpdateComment = function (postId, commentId, newText) {
-        return mutateComments(postId, (comments) => {
-          for (const c of comments) {
-            if (c.id === commentId) { c.text = newText; return; }
-            for (const r of c.replies || []) {
-              if (r.id === commentId) { r.text = newText; return; }
-            }
-          }
-        });
-      };
-
       window.__fbIncrementViews = function (postId) {
         return updateDoc(doc(db, "posts", postId), { views: increment(1) });
       };
 
-      // 댓글/답글은 게시물 문서 안의 배열 필드라서, 통째로 읽고 수정한 뒤 다시 써준다.
-      async function mutateComments(postId, mutator) {
-        const ref = doc(db, "posts", postId);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) return;
-        const comments = snap.data().comments || [];
-        mutator(comments);
-        await updateDoc(ref, { comments });
-      }
+      /* ==================================================================
+         댓글 (Firestore posts/{postId}/comments/{commentId} 서브컬렉션)
+         - 예전엔 posts 문서 안의 comments 배열 필드였는데, 배열 항목 단위로는 소유권을
+           규칙으로 정확히 검증할 수 없어서 서브컬렉션으로 분리했다 (firestore.rules 참고).
+         - parentCommentId: 최상위 댓글이면 null, 답글이면 부모 댓글의 문서 id.
+         - 게시글 상세 화면을 볼 때만 구독하고, 벗어나면 해제한다 (showPage 훅 참고,
+           채팅 메시지 구독/해제와 동일한 패턴).
+         ================================================================== */
+      window.__REAL_POST_COMMENTS = [];
+      let unsubPostComments = null;
 
-      window.__fbAddComment = function (postId, comment, parentCommentId) {
-        const plainComment = { ...comment };
-        delete plainComment.isReal;
-        return mutateComments(postId, (comments) => {
-          if (parentCommentId) {
-            const parent = comments.find((c) => c.id === parentCommentId);
-            if (parent) {
-              parent.replies = parent.replies || [];
-              parent.replies.push(plainComment);
-            }
-          } else {
-            comments.push(plainComment);
-          }
+      window.__subscribePostComments = function (postId) {
+        window.__unsubscribePostComments();
+        const commentsCol = collection(db, "posts", postId, "comments");
+        const qy = query(commentsCol, orderBy("createdAt", "asc"));
+        unsubPostComments = onSnapshot(qy, (snap) => {
+          window.__REAL_POST_COMMENTS = snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              isReal: true,
+              authorUid: data.authorUid,
+              authorName: data.authorName || "",
+              authorInitial: data.authorInitial || "",
+              lang: data.lang || "ko",
+              text: data.text,
+              likes: data.likes || 0,
+              createdAt: toMillis(data.createdAt),
+              parentCommentId: data.parentCommentId || null,
+            };
+          });
+          if (typeof window.__onPostCommentsChange === "function") window.__onPostCommentsChange();
         });
+      };
+      window.__unsubscribePostComments = function () {
+        if (unsubPostComments) { unsubPostComments(); unsubPostComments = null; }
+        window.__REAL_POST_COMMENTS = [];
+      };
+
+      window.__fbAddComment = async function (postId, comment, parentCommentId) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        await addDoc(collection(db, "posts", postId, "comments"), {
+          authorUid: auth.currentUser.uid,
+          authorName: comment.authorName || "",
+          authorInitial: comment.authorInitial || "",
+          lang: comment.lang || "ko",
+          text: comment.text,
+          likes: 0,
+          createdAt: serverTimestamp(),
+          parentCommentId: parentCommentId || null,
+        });
+        await updateDoc(doc(db, "posts", postId), { commentCount: increment(1) });
       };
 
       window.__fbLikeComment = function (postId, commentId, delta) {
-        return mutateComments(postId, (comments) => {
-          for (const c of comments) {
-            if (c.id === commentId) { c.likes = Math.max(0, (c.likes || 0) + delta); return; }
-            for (const r of c.replies || []) {
-              if (r.id === commentId) { r.likes = Math.max(0, (r.likes || 0) + delta); return; }
-            }
-          }
-        });
+        return updateDoc(doc(db, "posts", postId, "comments", commentId), { likes: increment(delta) });
       };
 
-      window.__fbDeleteComment = function (postId, commentId) {
-        return mutateComments(postId, (comments) => {
-          const filtered = comments.filter((c) => c.id !== commentId);
-          filtered.forEach((c) => { c.replies = (c.replies || []).filter((r) => r.id !== commentId); });
-          comments.length = 0;
-          comments.push(...filtered);
-        });
+      window.__fbUpdateComment = function (postId, commentId, newText) {
+        return updateDoc(doc(db, "posts", postId, "comments", commentId), { text: newText });
+      };
+
+      // 댓글을 지울 때, 그 댓글에 달린 답글도 같이 지운다(예전 배열 구조에서 답글이 댓글 안에
+      // 중첩되어 있어 같이 사라지던 것과 동일한 사용자 경험을 유지하기 위함).
+      window.__fbDeleteComment = async function (postId, commentId) {
+        const commentsCol = collection(db, "posts", postId, "comments");
+        const repliesSnap = await getDocs(query(commentsCol, where("parentCommentId", "==", commentId)));
+        let deletedCount = 0;
+        for (const replyDoc of repliesSnap.docs) {
+          try {
+            // 남이 단 답글은 규칙상 삭제 권한이 없어 실패할 수 있다 - 그 경우 그대로 남기고 계속 진행한다
+            // (부모 댓글이 없어지면 화면에서는 어차피 안 보이게 된다).
+            await deleteDoc(replyDoc.ref);
+            deletedCount++;
+          } catch (err) {
+            console.error('답글 삭제 실패(다른 사람이 쓴 답글일 수 있음):', err);
+          }
+        }
+        await deleteDoc(doc(db, "posts", postId, "comments", commentId));
+        deletedCount++;
+        if (deletedCount > 0) {
+          await updateDoc(doc(db, "posts", postId), { commentCount: increment(-deletedCount) });
+        }
+      };
+
+      // 마이페이지 "내 댓글" 탭: 게시글마다 따로 구독할 수 없으니, 내가 쓴 댓글을
+      // 모든 게시글에서 한 번에 찾아오는 collectionGroup 쿼리로 조회한다 (실시간 구독 아님, 1회성).
+      window.__fbFetchMyComments = async function () {
+        if (!auth.currentUser) return [];
+        const myUid = auth.currentUser.uid;
+        const qy = query(collectionGroup(db, "comments"), where("authorUid", "==", myUid), orderBy("createdAt", "desc"));
+        const snap = await getDocs(qy);
+        const results = [];
+        for (const d of snap.docs) {
+          const data = d.data();
+          const postRef = d.ref.parent.parent;
+          let postTitle = "";
+          let postBody = "";
+          if (postRef) {
+            try {
+              const postSnap = await getDoc(postRef);
+              if (postSnap.exists()) {
+                postTitle = postSnap.data().title || "";
+                postBody = postSnap.data().body || "";
+              }
+            } catch (err) { /* 게시글이 삭제된 경우 등은 조용히 무시 */ }
+          }
+          results.push({
+            id: d.id,
+            text: data.text,
+            createdAt: toMillis(data.createdAt),
+            postId: postRef ? postRef.id : null,
+            postTitle,
+            postBody,
+          });
+        }
+        return results;
       };
 
       /* ==================================================================
