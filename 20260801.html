@@ -5601,20 +5601,15 @@
       const analytics = getAnalytics(app);
 
       /* ==================================================================
-         App Check: Firestore/AI Logic(번역) API가 정식 등록된 도메인(unily-e973f.web.app 등)
-         밖에서 페이지 소스만 복사해 악용되는 걸 막는다. 설정 안 된 프로젝트 키(firebaseConfig)는
-         원래 공개되어도 되는 값이지만(구글 web API key는 비밀값이 아님, 진짜 보호는 Security
-         Rules + App Check가 함), App Check 없이는 "누가 요청했는지"까지는 검증 못 한다.
-
-         reCAPTCHA Enterprise 키(console.cloud.google.com/security/recaptcha에서 생성) 등록 완료.
-
-         남은 단계:
-         Firebase 콘솔(console.firebase.google.com/project/unily-e973f/appcheck)에서
-         이 사이트 키로 웹 앱을 App Check에 등록 → 그 다음 Firestore/AI Logic 각각에
-         "적용(Enforce)" 버튼을 눌러야 실제로 미등록 도메인의 요청이 차단되기 시작한다.
-         (이 단계는 콘솔에서만 가능해서 코드로 대신할 수 없음)
+         App Check: 보류 상태로 되돌림.
+         reCAPTCHA Enterprise는 결제 계정 연결이 필요할 수 있어서(월 1,000건까지는 무료지만,
+         "Spark 요금제라 과금 자체가 물리적으로 불가능"이라는 지금까지의 안전장치가 깨질 수 있음),
+         사용자 판단으로 활성화하지 않기로 함. 아래처럼 키를 비워두면 initializeAppCheck 자체가
+         호출되지 않아 reCAPTCHA API를 아예 건드리지 않는다 (안전한 기본값).
+         나중에 다시 검토하고 싶으면: 결제 계정 연결 없이 쓸 수 있는 방법(예: 무료 티어 안에서
+         빌링만 별도로 막아두는 예산 알림 설정 등)을 먼저 확인한 뒤 진행할 것.
          ================================================================== */
-      const APP_CHECK_SITE_KEY = "6LdEvXYtAAAAAGUiu37Iyph6LOnN1OwyTVDOwVKy";
+      const APP_CHECK_SITE_KEY = "";
       if (APP_CHECK_SITE_KEY) {
         initializeAppCheck(app, {
           provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
