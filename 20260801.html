@@ -3964,9 +3964,9 @@
            SERVICE LAYER
            ================================================================== */
 
-        // TranslationService: 지금은 무료 구글 번역 엔드포인트를 호출하지만,
+        // TranslationService: Firebase AI Logic(Gemini)으로 실시간 번역한다.
         // 호출부는 translate(text, sourceLang, targetLang)만 알고 있으면 되므로
-        // 나중에 실제 번역 API(fetch)로 내부만 교체하면 된다.
+        // 내부 구현(AI 호출 방식)이 바뀌어도 호출부는 그대로 쓸 수 있다.
         const TranslationService = (function () {
             const cache = {};
             function cacheKey(sourceLang, targetLang) { return sourceLang + '|' + targetLang; }
@@ -3977,19 +3977,29 @@
                 return bucket ? bucket[text] : undefined;
             }
 
+            // 구글 무료 번역 엔드포인트: Gemini 호출이 실패했을 때(네트워크 오류, 할당량 초과 등)의 예비 수단.
+            async function fallbackTranslate(text, sourceLang, targetLang) {
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLang)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                return (data[0] || []).map(chunk => chunk[0]).join('') || text;
+            }
+
             async function translate(text, sourceLang, targetLang) {
                 if (!text || sourceLang === targetLang) return text;
                 const key = cacheKey(sourceLang, targetLang);
                 cache[key] = cache[key] || {};
                 if (cache[key][text] !== undefined) return cache[key][text];
                 try {
-                    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLang)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
-                    const res = await fetch(url);
-                    const data = await res.json();
-                    const translated = (data[0] || []).map(chunk => chunk[0]).join('');
-                    cache[key][text] = translated || text;
+                    if (!window.__aiTranslate) throw new Error('AI translate not ready');
+                    cache[key][text] = await window.__aiTranslate(text, sourceLang, targetLang);
                 } catch (err) {
-                    cache[key][text] = text;
+                    console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
+                    try {
+                        cache[key][text] = await fallbackTranslate(text, sourceLang, targetLang);
+                    } catch (err2) {
+                        cache[key][text] = text;
+                    }
                 }
                 return cache[key][text];
             }
@@ -5094,6 +5104,11 @@
         serverTimestamp,
         increment,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+      import {
+        getAI,
+        getGenerativeModel,
+        GoogleAIBackend,
+      } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-ai.js";
 
       // Your web app's Firebase configuration
       // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -5112,6 +5127,28 @@
       const analytics = getAnalytics(app);
       const auth = getAuth(app);
       const db = getFirestore(app);
+      const ai = getAI(app, { backend: new GoogleAIBackend() });
+      const translateModel = getGenerativeModel(ai, {
+        model: "gemini-3.6-flash",
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+      });
+
+      const LANG_NAMES = {
+        ko: "Korean", en: "English", fr: "French", es: "Spanish",
+        de: "German", ja: "Japanese", "zh-CN": "Simplified Chinese",
+      };
+
+      // 실시간 AI(Gemini) 번역. TranslationService(위쪽 클래식 스크립트)가 이 함수를 통해 호출한다.
+      window.__aiTranslate = async function (text, sourceLang, targetLang) {
+        const sourceName = LANG_NAMES[sourceLang] || sourceLang;
+        const targetName = LANG_NAMES[targetLang] || targetLang;
+        const prompt =
+          `Translate the following text from ${sourceName} to ${targetName}.\n` +
+          `Output ONLY the translated text, with no quotes, labels, or explanation.\n\n` +
+          text;
+        const result = await translateModel.generateContent(prompt);
+        return result.response.text().trim();
+      };
 
       // handleCredentialResponse(위쪽 스크립트)에서 구글 로그인 성공 시 호출됨:
       // Google ID 토큰으로 Firebase Auth 로그인 + Firestore users 컬렉션에 유저 문서 자동 생성
