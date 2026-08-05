@@ -1651,7 +1651,7 @@
 
             <!-- CENTER: Composer + Feed -->
             <main class="community-feed-col">
-                <div class="post-composer">
+                <div class="post-composer" id="composerBox">
                     <div class="composer-title" data-i18n="composer_title">게시글 작성하기</div>
                     <div class="composer-top">
                         <div class="composer-avatar" id="composerAvatar">U</div>
@@ -1667,6 +1667,10 @@
                         <button class="btn-connect" id="composerSubmitBtn" data-i18n="composer_submit">게시</button>
                     </div>
                     <div class="composer-translate-hint" data-i18n="composer_translate_hint">자신의 언어로 쓰면 모두가 그들의 언어로 읽어요.</div>
+                </div>
+                <div class="post-composer" id="composerLoginPrompt" style="display:none; text-align:center;">
+                    <p style="margin-bottom:12px; color:var(--ink-soft);">로그인 후 게시글을 작성할 수 있어요.</p>
+                    <button class="btn-connect" onclick="showPage('mypage')">로그인하러 가기</button>
                 </div>
 
                 <div class="community-toolbar">
@@ -3412,10 +3416,27 @@
             alert(await translateText('인증 메일이 발송되었습니다!', currentLang));
         }
 
+        // 게시글 작성 폼은 실제 Firebase 로그인(구글 로그인)이 되어 있을 때만 접근 가능하도록 한다.
+        // AuthService.isLoggedIn()은 이메일/비밀번호 목업 로그인도 true를 반환하지만, 그 경우
+        // 실제 유저 ID(uid)가 없어 Firestore에 저장할 수 없으므로 별도로 window.__myUid()로 판별한다.
+        function canWritePosts() {
+            return !!(window.__myUid && window.__myUid());
+        }
+
+        function refreshComposerAccess() {
+            const composerBox = document.getElementById('composerBox');
+            const composerPrompt = document.getElementById('composerLoginPrompt');
+            if (!composerBox || !composerPrompt) return;
+            const allowed = canWritePosts();
+            composerBox.style.display = allowed ? '' : 'none';
+            composerPrompt.style.display = allowed ? 'none' : 'block';
+        }
+
         function checkLoginState() {
             const authContainer = document.getElementById('authContainer');
             const profileContainer = document.getElementById('profileContainer');
             const savedSection = document.getElementById('savedSection');
+            refreshComposerAccess();
 
             if (AuthService.isLoggedIn()) {
                 authContainer.style.display = 'none';
@@ -3439,6 +3460,11 @@
             if (typeof renderMsgNavBadge === 'function') renderMsgNavBadge();
             if (typeof refreshNavCtaButton === 'function') refreshNavCtaButton();
         }
+
+        // Firebase가 로그인 세션 복원을 마치면(비동기) 호출됨 → 작성 폼 접근 권한을 다시 계산한다.
+        window.__onAuthStateResolved = function () {
+            refreshComposerAccess();
+        };
 
         // 초기화 함수
         window.addEventListener('DOMContentLoaded', () => {
@@ -4669,6 +4695,10 @@
 
         /* ---------- COMPOSER ---------- */
         function submitPost() {
+            if (!canWritePosts()) {
+                showPage('mypage');
+                return;
+            }
             const bodyInput = document.getElementById('composerInput');
             const body = bodyInput.value.trim();
             if (!body) return;
@@ -4948,6 +4978,7 @@
         getAuth,
         GoogleAuthProvider,
         signInWithCredential,
+        onAuthStateChanged,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
       import {
         getFirestore,
@@ -4988,6 +5019,12 @@
       const analytics = getAnalytics(app);
       const auth = getAuth(app);
       const db = getFirestore(app);
+
+      // Firebase가 로그인 세션 복원(비동기)을 마칠 때마다 classic 스크립트에 알려서
+      // 글 작성 폼 접근 권한(canWritePosts) 등을 다시 계산하게 한다.
+      onAuthStateChanged(auth, () => {
+        if (typeof window.__onAuthStateResolved === "function") window.__onAuthStateResolved();
+      });
       const ai = getAI(app, { backend: new GoogleAIBackend() });
       const translateModel = getGenerativeModel(ai, {
         model: "gemini-3.6-flash",
