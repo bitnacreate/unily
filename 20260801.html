@@ -525,12 +525,32 @@
     font-weight: 700;
     flex-shrink: 0;
   }
+  .msg-search-wrap { padding: 14px 20px 0; flex-shrink: 0; }
+  .msg-search-input {
+    width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 100px;
+    padding: 9px 16px; font-size: 13px; outline: none; color: var(--ink);
+  }
+  .msg-search-input:focus { border-color: var(--indigo); }
+  .msg-filter-chips { display: flex; gap: 8px; padding: 12px 20px; flex-shrink: 0; }
+  .msg-filter-chip {
+    border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+    font-size: 12.5px; font-weight: 600; padding: 6px 14px; border-radius: 100px;
+    cursor: pointer; transition: all .15s ease; display: flex; align-items: center; gap: 6px;
+  }
+  .msg-filter-chip:hover { background: var(--bg-alt); }
+  .msg-filter-chip.active { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+  .msg-filter-count {
+    background: rgba(255,255,255,0.9); color: var(--indigo-deep); font-size: 10.5px; font-weight: 700;
+    border-radius: 100px; padding: 1px 6px;
+  }
+  .msg-filter-chip:not(.active) .msg-filter-count { background: var(--coral); color: #fff; }
   .msg-list {
     overflow-y: auto;
     flex: 1;
     min-height: 0; /* flex item이 내용 크기만큼 늘어나는 것을 막아 overflow-y:auto가 실제로 동작하게 함 */
   }
   .msg-item {
+    position: relative;
     padding: 16px 20px;
     display: flex;
     align-items: center;
@@ -571,11 +591,22 @@
     border: 2px solid #fff;
   }
   .msg-info { flex: 1; overflow: hidden; }
-  .msg-name-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-  .msg-name { font-size: 14.5px; font-weight: 700; color: var(--ink); }
-  .msg-time { font-size: 11.5px; color: var(--ink-soft); }
+  .msg-name-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; gap: 8px; }
+  .msg-name { font-size: 14.5px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msg-time { font-size: 11.5px; color: var(--ink-soft); flex-shrink: 0; }
   .msg-subinfo { font-size: 12px; color: var(--indigo-deep); margin-bottom: 4px; font-weight: 500; }
-  .msg-preview { font-size: 13px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-preview {
+    font-size: 13px; color: var(--ink-soft); display: flex; align-items: center; gap: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .msg-preview .read-receipt { flex-shrink: 0; opacity: .6; font-size: 11px; }
+  .msg-preview.unread { color: var(--ink); font-weight: 600; }
+  .msg-pin-toggle {
+    position: absolute; top: 6px; left: 6px; border: none; background: none; cursor: pointer;
+    font-size: 11px; opacity: 0; transition: opacity .15s ease; padding: 4px; line-height: 1;
+    transform: rotate(-40deg);
+  }
+  .msg-item:hover .msg-pin-toggle, .msg-pin-toggle.pinned { opacity: .7; }
 
   /* 메시지 목록/채팅방에 내역이 하나도 없을 때 보여주는 빈 상태 화면 (인스타그램/트위터 DM 스타일) */
   .msg-empty-state {
@@ -606,6 +637,23 @@
     gap: 14px;
     flex-shrink: 0;
   }
+  .msg-header-actions { position: relative; flex-shrink: 0; }
+  .msg-more-btn {
+    border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer;
+    color: var(--ink-soft); padding: 6px 8px; border-radius: 8px;
+  }
+  .msg-more-btn:hover { background: var(--bg-alt); color: var(--ink); }
+  .msg-more-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; min-width: 160px;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius-md);
+    box-shadow: 0 15px 35px -10px rgba(90,70,220,0.2); overflow: hidden;
+  }
+  .msg-more-menu button {
+    display: block; width: 100%; text-align: left; border: none; background: none;
+    padding: 12px 16px; font-size: 13px; color: var(--ink); cursor: pointer;
+  }
+  .msg-more-menu button:hover { background: var(--bg-alt); }
+  .msg-more-menu button.danger { color: #E0447A; }
   .msg-chat-body {
     flex: 1;
     min-height: 0; /* flex item이 내용 크기만큼 늘어나는 것을 막아 overflow-y:auto가 실제로 동작하게 함 */
@@ -616,9 +664,28 @@
     gap: 14px;
     background: var(--bg);
   }
-  .chat-bubble-wrap { display: flex; flex-direction: column; max-width: 70%; }
+  .chat-date-sep {
+    align-self: center; font-size: 11px; font-weight: 700; color: var(--ink-soft);
+    background: var(--bg-alt); padding: 5px 16px; border-radius: 100px;
+    position: sticky; top: 0; z-index: 2;
+  }
+  .chat-bubble-wrap { display: flex; flex-direction: column; max-width: 70%; position: relative; }
   .chat-bubble-wrap.incoming { align-self: flex-start; }
   .chat-bubble-wrap.outgoing { align-self: flex-end; }
+  .chat-bubble-wrap.grouped { margin-top: -8px; }
+  .chat-group-row { display: flex; align-items: flex-end; gap: 8px; }
+  .chat-bubble-wrap.outgoing .chat-group-row { flex-direction: row-reverse; }
+  .chat-group-avatar {
+    width: 24px; height: 24px; border-radius: 50%; background: var(--indigo); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700;
+    flex-shrink: 0; visibility: hidden;
+  }
+  .chat-group-avatar.show { visibility: visible; }
+  .chat-reply-ref {
+    font-size: 11px; color: var(--ink-soft); background: rgba(36,31,56,0.05); border-left: 2px solid var(--indigo);
+    padding: 5px 9px; border-radius: 6px; margin-bottom: 4px; max-width: 220px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
   .chat-bubble {
     padding: 12px 16px;
     border-radius: 18px;
@@ -636,8 +703,37 @@
     color: #FFF;
     border-top-right-radius: 4px;
   }
-  .chat-time { font-size: 11px; color: var(--ink-soft); margin-top: 4px; padding: 0 4px; }
-  .outgoing .chat-time { text-align: right; }
+  .chat-bubble-hover-actions { display: flex; align-items: center; gap: 3px; opacity: 0; transition: opacity .15s ease; }
+  .chat-group-row:hover .chat-bubble-hover-actions { opacity: 1; }
+  .chat-bubble-action {
+    background: #fff; border: 1px solid var(--line); width: 25px; height: 25px; border-radius: 50%;
+    font-size: 11.5px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .chat-bubble-action:hover { background: var(--bg-alt); }
+  .chat-reaction-picker {
+    display: flex; gap: 3px; background: #fff; border: 1px solid var(--line); border-radius: 100px;
+    padding: 4px 6px; position: absolute; bottom: 100%; margin-bottom: 6px; z-index: 6;
+    box-shadow: 0 15px 30px -10px rgba(90,70,220,0.3);
+  }
+  .chat-bubble-wrap.outgoing .chat-reaction-picker { right: 0; }
+  .chat-reaction-picker button { border: none; background: none; font-size: 16px; cursor: pointer; padding: 2px 5px; border-radius: 6px; }
+  .chat-reaction-picker button:hover { background: var(--bg-alt); }
+  .chat-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+  .chat-bubble-wrap.outgoing .chat-reactions { justify-content: flex-end; }
+  .chat-reaction-chip {
+    font-size: 11px; background: #fff; border: 1px solid var(--line); border-radius: 100px; padding: 2px 8px;
+    cursor: pointer; display: flex; align-items: center; gap: 3px; color: var(--ink-soft);
+  }
+  .chat-reaction-chip.mine { border-color: var(--indigo); background: rgba(122,112,242,0.12); color: var(--indigo-deep); }
+  .chat-time { font-size: 11px; color: var(--ink-soft); margin-top: 4px; padding: 0 4px; display: flex; align-items: center; gap: 4px; }
+  .outgoing .chat-time { justify-content: flex-end; }
+  .chat-read-receipt { opacity: .7; }
+  .msg-reply-preview {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 20px; background: var(--bg-alt); border-top: 1px solid var(--line); flex-shrink: 0;
+  }
+  .msg-reply-preview-text { font-size: 12px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msg-reply-cancel { border: none; background: none; cursor: pointer; font-size: 12px; color: var(--ink-soft); flex-shrink: 0; }
   .msg-chat-input-area {
     padding: 16px 20px;
     border-top: 1px solid var(--line);
@@ -1467,6 +1563,15 @@
             <!-- 왼쪽 대화 상대 목록 -->
             <div class="msg-sidebar">
                 <div class="msg-sidebar-header" data-i18n="msg_list_title">메시지 목록</div>
+                <div class="msg-search-wrap">
+                    <input type="text" id="msgSearchInput" class="msg-search-input" placeholder="이름으로 검색">
+                </div>
+                <div class="msg-filter-chips">
+                    <button type="button" class="msg-filter-chip active" id="msgFilterAll" onclick="setMsgFilter('all')">전체</button>
+                    <button type="button" class="msg-filter-chip" id="msgFilterUnread" onclick="setMsgFilter('unread')">
+                        안읽음<span class="msg-filter-count" id="msgFilterUnreadCount" style="display:none;"></span>
+                    </button>
+                </div>
                 <div class="msg-list" id="msgList"></div>
             </div>
             <!-- 오른쪽 실제 채팅 화면 -->
@@ -1474,13 +1579,24 @@
                 <div class="msg-chat-header" id="chatHeader">
                     <button onclick="closeMobileChat()" style="display:none; border:none; background:none; font-size:18px; cursor:pointer;" id="backToMsgList">←</button>
                     <div class="msg-avatar" id="activeAvatar">S</div>
-                    <div>
+                    <div style="flex:1; min-width:0;">
                         <div style="font-weight:700; font-size:16px;" id="activeName">Sarah Jenkins</div>
                         <div style="font-size:12.5px; color:var(--ink-soft);" id="activeUni">Stanford University · 🇺🇸 미국</div>
                         <div class="local-time-inline" id="activeLocalTime" style="display:none;"></div>
                     </div>
+                    <div class="msg-header-actions" id="msgHeaderActions" style="display:none;">
+                        <button type="button" class="msg-more-btn" id="chatMoreBtn" onclick="toggleChatMoreMenu()" aria-label="더보기">⋯</button>
+                        <div class="msg-more-menu" id="chatMoreMenu" style="display:none;">
+                            <button type="button" onclick="handleDeleteConversation()">대화 내역 삭제</button>
+                            <button type="button" class="danger" onclick="handleBlockUser()">차단하기</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="msg-chat-body" id="chatBody"></div>
+                <div class="msg-reply-preview" id="msgReplyPreview" style="display:none;">
+                    <div class="msg-reply-preview-text" id="msgReplyPreviewText"></div>
+                    <button type="button" class="msg-reply-cancel" onclick="cancelReply()" aria-label="답장 취소">✕</button>
+                </div>
                 <div class="msg-chat-input-area">
                     <input type="text" id="msgInput" class="msg-input" placeholder="Type a message... (Instant Translation enabled)" onkeypress="if(event.key==='Enter') sendChatMessage()">
                     <button class="msg-send-btn" onclick="sendChatMessage()" data-i18n="msg_send">전송</button>
@@ -2985,31 +3101,83 @@
             return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
+        function formatDateSep(ms) {
+            const d = new Date(ms);
+            const today = new Date();
+            const yest = new Date();
+            yest.setDate(today.getDate() - 1);
+            const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+            if (sameDay(d, today)) return '오늘';
+            if (sameDay(d, yest)) return '어제';
+            return d.toLocaleDateString([], d.getFullYear() === today.getFullYear() ? { month: 'long', day: 'numeric' } : { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        /* ---------- 메시지 목록: 검색 / 필터 / 핀 ---------- */
+        let msgFilter = 'all';
+        let msgSearchQuery = '';
+
+        function setMsgFilter(mode) {
+            msgFilter = mode;
+            document.getElementById('msgFilterAll').classList.toggle('active', mode === 'all');
+            document.getElementById('msgFilterUnread').classList.toggle('active', mode === 'unread');
+            renderMessagesList();
+        }
+
+        function togglePinChat(chatId, currentlyPinned) {
+            if (window.__togglePinChat) window.__togglePinChat(chatId, !currentlyPinned).catch(err => console.error('고정 실패:', err));
+        }
+
         function renderMessagesList() {
             const listEl = document.getElementById('msgList');
             if (!listEl) return;
-            const chats = window.__CHATS || [];
+            const allChats = window.__CHATS || [];
+            const myUid = window.__myUid ? window.__myUid() : null;
+
+            const unreadThreadCount = allChats.filter(c => c.unreadCount > 0).length;
+            const countEl = document.getElementById('msgFilterUnreadCount');
+            if (countEl) {
+                countEl.textContent = unreadThreadCount > 99 ? '99+' : String(unreadThreadCount);
+                countEl.style.display = unreadThreadCount > 0 ? 'inline-block' : 'none';
+            }
+
+            let chats = allChats;
+            if (msgFilter === 'unread') chats = chats.filter(c => c.unreadCount > 0);
+            if (msgSearchQuery) {
+                const q = msgSearchQuery.toLowerCase();
+                chats = chats.filter(c => (c.otherName || '').toLowerCase().includes(q));
+            }
+
             if (chats.length === 0) {
                 listEl.innerHTML = msgEmptyStateHTML();
                 return;
             }
-            listEl.innerHTML = chats.map(c => `
+
+            listEl.innerHTML = chats.map(c => {
+                const unread = c.unreadCount > 0;
+                const mineLast = c.lastMessageSenderUid && c.lastMessageSenderUid === myUid;
+                const readIcon = mineLast
+                    ? `<span class="read-receipt">${c.otherLastReadAt && c.otherLastReadAt >= c.updatedAt ? '✓✓' : '✓'}</span>`
+                    : '';
+                return `
           <div class="msg-item ${c.id === currentChatId ? 'active' : ''}" onclick="selectChat('${c.id}')">
+            <button type="button" class="msg-pin-toggle${c.pinned ? ' pinned' : ''}" onclick="event.stopPropagation(); togglePinChat('${c.id}', ${c.pinned})" aria-label="${c.pinned ? '고정 해제' : '대화 고정'}">📌</button>
             <div class="msg-avatar-wrap">
               <div class="msg-avatar">${initialsOf(c.otherName)}</div>
+              ${unread ? `<div class="msg-badge">${c.unreadCount > 9 ? '9+' : c.unreadCount}</div>` : ''}
             </div>
             <div class="msg-info">
               <div class="msg-name-row">
                 <span class="msg-name">${escapeHTML(c.otherName || 'Unknown')}</span>
                 <span class="msg-time">${c.updatedAt ? relativeTimeLabel(c.updatedAt) : ''}</span>
               </div>
-              <div class="msg-preview">${escapeHTML(c.lastMessage || '')}</div>
+              <div class="msg-preview${unread ? ' unread' : ''}">${readIcon}${escapeHTML(c.lastMessage || '')}</div>
             </div>
           </div>
-        `).join('');
+        `;
+            }).join('');
         }
 
-        // "메시지" 네비게이션 링크의 빨간 뱃지는 실시간 구독 없이는 정확한 안 읽음 수를 알 수 없으므로 비활성화.
+        // "메시지" 네비게이션 링크의 빨간 뱃지는 메시지 화면 밖에서는 대화 목록을 구독하지 않아 알 수 없으므로 비활성화.
         function renderMsgNavBadge() {
             const badge = document.getElementById('msgNavBadge');
             if (badge) badge.style.display = 'none';
@@ -3018,6 +3186,10 @@
         function selectChat(chatId) {
             currentChatId = chatId;
             const item = (window.__CHATS || []).find(c => c.id === chatId);
+            cancelReply();
+            openReactionPickerId = null;
+            const moreMenu = document.getElementById('chatMoreMenu');
+            if (moreMenu) moreMenu.style.display = 'none';
 
             // 모바일에서는 .msg-chat-area가 .chat-open이 붙기 전까지 display:none 상태라
             // scrollHeight를 읽을 수 없다. 채팅창을 화면에 보이게 먼저 전환한 뒤에 스크롤을 계산해야 한다.
@@ -3031,6 +3203,7 @@
             document.getElementById('activeName').innerText = item ? item.otherName : '';
             document.getElementById('activeUni').innerText = '';
             document.getElementById('activeLocalTime').style.display = 'none';
+            document.getElementById('msgHeaderActions').style.display = item ? 'block' : 'none';
 
             renderMessagesList();
             if (window.__subscribeChatMessages) window.__subscribeChatMessages(chatId);
@@ -3039,6 +3212,82 @@
 
         function closeMobileChat() {
             document.getElementById('msgContainer').classList.remove('chat-open');
+        }
+
+        /* ---------- 채팅방: 더보기 메뉴(대화 삭제/차단) ---------- */
+        function toggleChatMoreMenu() {
+            const menu = document.getElementById('chatMoreMenu');
+            if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        }
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('chatMoreMenu');
+            const btn = document.getElementById('chatMoreBtn');
+            if (!menu || menu.style.display !== 'block') return;
+            if (btn && (e.target === btn || btn.contains(e.target))) return;
+            if (menu.contains(e.target)) return;
+            menu.style.display = 'none';
+        });
+
+        async function handleDeleteConversation() {
+            if (!currentChatId) return;
+            toggleChatMoreMenu();
+            const msg = await translateText('이 대화 내역을 삭제하시겠어요? 상대방 화면에는 그대로 남아있습니다.', currentLang);
+            if (!confirm(msg)) return;
+            if (window.__deleteConversation) await window.__deleteConversation(currentChatId).catch(err => console.error('대화 삭제 실패:', err));
+            if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
+            currentChatId = null;
+            renderChatArea();
+            closeMobileChat();
+        }
+
+        async function handleBlockUser() {
+            if (!currentChatId) return;
+            toggleChatMoreMenu();
+            const item = (window.__CHATS || []).find(c => c.id === currentChatId);
+            const name = item ? item.otherName : '이 사용자';
+            const msg = await translateText(name + '님을 차단하시겠어요? 서로의 메시지가 더 이상 보이지 않게 됩니다.', currentLang);
+            if (!confirm(msg)) return;
+            if (item && window.__blockUser) await window.__blockUser(item.otherUid).catch(err => console.error('차단 실패:', err));
+            if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
+            currentChatId = null;
+            renderChatArea();
+            closeMobileChat();
+        }
+
+        /* ---------- 채팅방: 답장 ---------- */
+        let replyingToMessage = null;
+
+        function startReplyTo(messageId) {
+            const msg = (window.__ACTIVE_MESSAGES || []).find(m => m.id === messageId);
+            if (!msg) return;
+            replyingToMessage = { id: msg.id, text: msg.text, senderUid: msg.senderUid };
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const chatInfo = (window.__CHATS || []).find(c => c.id === currentChatId);
+            const who = msg.senderUid === myUid ? '나' : (chatInfo ? chatInfo.otherName : '상대');
+            document.getElementById('msgReplyPreviewText').textContent = who + ': ' + msg.text;
+            document.getElementById('msgReplyPreview').style.display = 'flex';
+            document.getElementById('msgInput').focus();
+        }
+        function cancelReply() {
+            replyingToMessage = null;
+            const el = document.getElementById('msgReplyPreview');
+            if (el) el.style.display = 'none';
+        }
+
+        /* ---------- 채팅방: 이모지 리액션 ---------- */
+        const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
+        let openReactionPickerId = null;
+
+        function toggleReactionPicker(messageId) {
+            openReactionPickerId = openReactionPickerId === messageId ? null : messageId;
+            renderChatArea();
+        }
+
+        function toggleReaction(messageId, emoji) {
+            openReactionPickerId = null;
+            renderChatArea();
+            if (!currentChatId || !window.__toggleReaction) return;
+            window.__toggleReaction(currentChatId, messageId, emoji).catch(err => console.error('리액션 실패:', err));
         }
 
         // 채팅창 스크롤: 사용자가 이미 맨 아래 근처에 있을 때만(또는 명시적으로 요청했을 때만)
@@ -3054,11 +3303,13 @@
                 document.getElementById('activeName').textContent = '';
                 document.getElementById('activeUni').textContent = '';
                 document.getElementById('activeLocalTime').style.display = 'none';
+                document.getElementById('msgHeaderActions').style.display = 'none';
                 chatBody.innerHTML = msgEmptyStateHTML();
                 return;
             }
             const messages = window.__ACTIVE_MESSAGES || [];
             const myUid = window.__myUid ? window.__myUid() : null;
+            const chatInfo = (window.__CHATS || []).find(c => c.id === currentChatId);
 
             const prevScrollTop = chatBody.scrollTop;
             const prevScrollHeight = chatBody.scrollHeight;
@@ -3069,12 +3320,78 @@
                 return;
             }
 
-            chatBody.innerHTML = messages.map(m => `
-          <div class="chat-bubble-wrap ${m.senderUid === myUid ? 'outgoing' : 'incoming'}">
-            <div class="chat-bubble">${escapeHTML(m.text)}</div>
-            <div class="chat-time">${formatBubbleTime(m.createdAt)}</div>
+            let myLastMessageId = null;
+            for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].senderUid === myUid) { myLastMessageId = messages[i].id; break; }
+            }
+            const otherReadAt = chatInfo ? chatInfo.otherLastReadAt : 0;
+            const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+            let lastDateKey = null;
+            let lastSenderUid = null;
+            let lastMsgTime = 0;
+            let html = '';
+
+            messages.forEach(m => {
+                const dateKey = new Date(m.createdAt).toDateString();
+                if (dateKey !== lastDateKey) {
+                    html += `<div class="chat-date-sep">${escapeHTML(formatDateSep(m.createdAt))}</div>`;
+                    lastDateKey = dateKey;
+                    lastSenderUid = null;
+                }
+
+                const isOut = m.senderUid === myUid;
+                const grouped = m.senderUid === lastSenderUid && (m.createdAt - lastMsgTime) < GROUP_WINDOW_MS;
+
+                const avatarHtml = !isOut
+                    ? `<div class="chat-group-avatar${!grouped ? ' show' : ''}">${initialsOf(chatInfo ? chatInfo.otherName : '')}</div>`
+                    : '';
+
+                const replyHtml = m.replyTo
+                    ? `<div class="chat-reply-ref">${escapeHTML(m.replyTo.text || '')}</div>`
+                    : '';
+
+                const reactions = m.reactions || {};
+                const reactionKeys = Object.keys(reactions).filter(e => (reactions[e] || []).length > 0);
+                const reactionsHtml = reactionKeys.length
+                    ? `<div class="chat-reactions">${reactionKeys.map(e => {
+                        const mine = (reactions[e] || []).includes(myUid);
+                        return `<button type="button" class="chat-reaction-chip${mine ? ' mine' : ''}" onclick="toggleReaction('${m.id}','${e}')">${e} ${reactions[e].length}</button>`;
+                    }).join('')}</div>`
+                    : '';
+
+                const pickerHtml = openReactionPickerId === m.id
+                    ? `<div class="chat-reaction-picker">${REACTION_EMOJIS.map(e => `<button type="button" onclick="toggleReaction('${m.id}','${e}')">${e}</button>`).join('')}</div>`
+                    : '';
+
+                const readReceiptHtml = (isOut && m.id === myLastMessageId)
+                    ? `<span class="chat-read-receipt">${otherReadAt && otherReadAt >= m.createdAt ? '✓✓' : '✓'}</span>`
+                    : '';
+
+                html += `
+          <div class="chat-bubble-wrap ${isOut ? 'outgoing' : 'incoming'}${grouped ? ' grouped' : ''}">
+            ${pickerHtml}
+            <div class="chat-group-row">
+              ${avatarHtml}
+              <div style="min-width:0;">
+                ${replyHtml}
+                <div class="chat-bubble">${escapeHTML(m.text)}</div>
+              </div>
+              <div class="chat-bubble-hover-actions">
+                <button type="button" class="chat-bubble-action" onclick="toggleReactionPicker('${m.id}')" aria-label="반응 추가">🙂</button>
+                <button type="button" class="chat-bubble-action" onclick="startReplyTo('${m.id}')" aria-label="답장">↩</button>
+              </div>
+            </div>
+            ${reactionsHtml}
+            <div class="chat-time">${formatBubbleTime(m.createdAt)}${readReceiptHtml}</div>
           </div>
-        `).join('');
+        `;
+
+                lastSenderUid = m.senderUid;
+                lastMsgTime = m.createdAt;
+            });
+
+            chatBody.innerHTML = html;
 
             if (wasNearBottom) {
                 chatBody.scrollTop = chatBody.scrollHeight;
@@ -3088,9 +3405,14 @@
             const text = input.value.trim();
             if (!text || !currentChatId || !window.__sendChatMessage) return;
 
+            const replyTo = replyingToMessage
+                ? { messageId: replyingToMessage.id, text: replyingToMessage.text, senderUid: replyingToMessage.senderUid }
+                : null;
+
             input.value = '';
+            cancelReply();
             try {
-                await window.__sendChatMessage(currentChatId, text);
+                await window.__sendChatMessage(currentChatId, text, replyTo);
             } catch (err) {
                 console.error('메시지 전송 실패:', err);
             }
@@ -3531,6 +3853,10 @@
                 document.getElementById('ctaErrorMsg').classList.remove('active');
             });
             document.getElementById('editAvatarInput').addEventListener('change', handleEditAvatarChange);
+            document.getElementById('msgSearchInput').addEventListener('input', (e) => {
+                msgSearchQuery = e.target.value.trim();
+                renderMessagesList();
+            });
         });
     </script>
 
@@ -5045,6 +5371,8 @@
         orderBy,
         onSnapshot,
         serverTimestamp,
+        arrayUnion,
+        arrayRemove,
         increment,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
       import {
@@ -5073,7 +5401,19 @@
 
       // Firebase가 로그인 세션 복원(비동기)을 마칠 때마다 classic 스크립트에 알려서
       // 글 작성 폼 접근 권한(canWritePosts) 등을 다시 계산하게 한다.
-      onAuthStateChanged(auth, () => {
+      onAuthStateChanged(auth, async () => {
+        // 차단 목록은 새 채팅 시작/목록 필터링에서 동기적으로 참조해야 해서 로그인될 때 미리 캐시해둔다.
+        if (auth.currentUser) {
+          try {
+            const meSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+            window.__myBlockedUids = (meSnap.exists() && meSnap.data().blockedUids) || [];
+          } catch (err) {
+            window.__myBlockedUids = [];
+          }
+        } else {
+          window.__myBlockedUids = [];
+        }
+
         if (typeof window.__onAuthStateResolved === "function") window.__onAuthStateResolved();
         // 메시지 화면을 보고 있는 도중에 Firebase 로그인 세션 복원이 뒤늦게 끝난 경우,
         // 대화 목록 구독이 조용히 실패한 채로 남아있지 않도록 다시 시도한다.
@@ -5255,6 +5595,7 @@
       const chatsCol = collection(db, "chats");
       window.__CHATS = [];
       window.__ACTIVE_MESSAGES = [];
+      window.__myBlockedUids = window.__myBlockedUids || [];
       let unsubChatList = null;
       let unsubActiveMessages = null;
 
@@ -5262,23 +5603,48 @@
         return [uidA, uidB].sort().join("_");
       }
 
+      // 채팅방을 지금 보고 있음을 서버에 기록: 내 unreadCount를 0으로, lastReadAt을 지금 시각으로.
+      // 상대 화면의 "읽음 확인" 체크(single -> double)는 이 lastReadAt을 기준으로 계산된다.
+      function markChatRead(chatId) {
+        if (!auth.currentUser) return;
+        const myUid = auth.currentUser.uid;
+        updateDoc(doc(db, "chats", chatId), {
+          [`unreadCount.${myUid}`]: 0,
+          [`lastReadAt.${myUid}`]: serverTimestamp(),
+        }).catch(() => {}); // 대화방이 막 생성된 직후 등의 경합은 조용히 무시
+      }
+
       window.__subscribeChatList = function () {
         if (unsubChatList || !auth.currentUser) return;
         const myUid = auth.currentUser.uid;
         const qy = query(chatsCol, where("participants", "array-contains", myUid), orderBy("updatedAt", "desc"));
         unsubChatList = onSnapshot(qy, (snap) => {
-          window.__CHATS = snap.docs.map((d) => {
-            const data = d.data();
-            const otherUid = (data.participants || []).find((uid) => uid !== myUid);
-            const otherInfo = (data.participantInfo && data.participantInfo[otherUid]) || {};
-            return {
-              id: d.id,
-              otherUid,
-              otherName: otherInfo.name || "Unknown",
-              lastMessage: data.lastMessage || "",
-              updatedAt: toMillis(data.updatedAt),
-            };
-          });
+          const myBlocked = window.__myBlockedUids || [];
+          const list = snap.docs
+            .map((d) => {
+              const data = d.data();
+              const otherUid = (data.participants || []).find((uid) => uid !== myUid);
+              const otherInfo = (data.participantInfo && data.participantInfo[otherUid]) || {};
+              const unreadMap = data.unreadCount || {};
+              const lastReadMap = data.lastReadAt || {};
+              return {
+                id: d.id,
+                otherUid,
+                otherName: otherInfo.name || "Unknown",
+                lastMessage: data.lastMessage || "",
+                lastMessageSenderUid: data.lastMessageSenderUid || null,
+                updatedAt: toMillis(data.updatedAt),
+                unreadCount: unreadMap[myUid] || 0,
+                pinned: (data.pinnedBy || []).includes(myUid),
+                otherLastReadAt: toMillis(lastReadMap[otherUid]),
+                deletedForMe: (data.deletedFor || []).includes(myUid),
+              };
+            })
+            .filter((c) => !c.deletedForMe && !myBlocked.includes(c.otherUid));
+          // 고정된 대화가 먼저 오도록 재정렬한다. Array#sort는 안정 정렬이라, 같은 그룹(고정/비고정) 안의
+          // 최신순 순서(쿼리가 이미 updatedAt desc로 내려줌)는 그대로 유지된다.
+          list.sort((a, b) => (b.pinned === a.pinned ? 0 : b.pinned ? 1 : -1));
+          window.__CHATS = list;
           if (typeof window.__onChatsChange === "function") window.__onChatsChange();
         });
       };
@@ -5290,14 +5656,24 @@
 
       window.__subscribeChatMessages = function (chatId) {
         window.__unsubscribeChatMessages();
+        markChatRead(chatId);
         const messagesCol = collection(db, "chats", chatId, "messages");
         const qy = query(messagesCol, orderBy("createdAt", "asc"));
         unsubActiveMessages = onSnapshot(qy, (snap) => {
           window.__ACTIVE_MESSAGES = snap.docs.map((d) => {
             const data = d.data();
-            return { id: d.id, senderUid: data.senderUid, text: data.text, createdAt: toMillis(data.createdAt) };
+            return {
+              id: d.id,
+              senderUid: data.senderUid,
+              text: data.text,
+              createdAt: toMillis(data.createdAt),
+              replyTo: data.replyTo || null,
+              reactions: data.reactions || {},
+            };
           });
           if (typeof window.__onActiveMessagesChange === "function") window.__onActiveMessagesChange();
+          // 채팅방을 계속 보고 있는 동안 상대가 새 메시지를 보내면, 그 시점에도 다시 읽음 처리한다.
+          markChatRead(chatId);
         });
       };
 
@@ -5311,6 +5687,7 @@
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
         const myUid = auth.currentUser.uid;
         if (myUid === otherUid) throw new Error("자기 자신에게는 메시지를 보낼 수 없습니다.");
+        if ((window.__myBlockedUids || []).includes(otherUid)) throw new Error("차단한 사용자입니다.");
         const chatId = chatIdFor(myUid, otherUid);
         const ref = doc(db, "chats", chatId);
         const snap = await getDoc(ref);
@@ -5323,22 +5700,78 @@
             },
             lastMessage: "",
             updatedAt: serverTimestamp(),
+            unreadCount: { [myUid]: 0, [otherUid]: 0 },
+            pinnedBy: [],
+            deletedFor: [],
           });
+        } else if ((snap.data().deletedFor || []).includes(myUid)) {
+          // 예전에 나만 목록에서 지웠던 대화라면, 다시 시작할 때 내 목록에 복원한다.
+          await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
         }
         return chatId;
       };
 
-      window.__sendChatMessage = async function (chatId, text) {
+      window.__sendChatMessage = async function (chatId, text, replyTo) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
-        await addDoc(collection(db, "chats", chatId, "messages"), {
-          senderUid: auth.currentUser.uid,
-          text,
-          createdAt: serverTimestamp(),
-        });
-        await updateDoc(doc(db, "chats", chatId), {
+        const myUid = auth.currentUser.uid;
+
+        const messageData = { senderUid: myUid, text, createdAt: serverTimestamp(), reactions: {} };
+        if (replyTo) messageData.replyTo = replyTo;
+        await addDoc(collection(db, "chats", chatId, "messages"), messageData);
+
+        const chatRef = doc(db, "chats", chatId);
+        const chatSnap = await getDoc(chatRef);
+        const participants = (chatSnap.exists() && chatSnap.data().participants) || [];
+        const otherUid = participants.find((uid) => uid !== myUid);
+
+        const updates = {
           lastMessage: text,
+          lastMessageSenderUid: myUid,
           updatedAt: serverTimestamp(),
+          // 둘 중 누구든 대화를 지운 상태였더라도, 새 메시지가 오면 양쪽 목록에 다시 나타나야 한다.
+          deletedFor: arrayRemove(...(otherUid ? [myUid, otherUid] : [myUid])),
+        };
+        if (otherUid) updates[`unreadCount.${otherUid}`] = increment(1);
+        await updateDoc(chatRef, updates);
+      };
+
+      window.__togglePinChat = function (chatId, pinned) {
+        if (!auth.currentUser) return Promise.resolve();
+        return updateDoc(doc(db, "chats", chatId), {
+          pinnedBy: pinned ? arrayUnion(auth.currentUser.uid) : arrayRemove(auth.currentUser.uid),
         });
+      };
+
+      // 대화 내역 삭제: 나에게만 안 보이게 하는 소프트 삭제. 상대방 쪽 사본은 그대로 남는다.
+      window.__deleteConversation = function (chatId) {
+        if (!auth.currentUser) return Promise.resolve();
+        return updateDoc(doc(db, "chats", chatId), { deletedFor: arrayUnion(auth.currentUser.uid) });
+      };
+
+      // 차단: 내 유저 문서에 기록 + 지금 대화도 내 목록에서 즉시 숨긴다.
+      // (신규 대화 생성은 firestore.rules에서도 다시 한 번 막는다 — __startOrGetChat과 규칙 양쪽에서 방어.)
+      window.__blockUser = async function (otherUid) {
+        if (!auth.currentUser) return;
+        const myUid = auth.currentUser.uid;
+        await setDoc(doc(db, "users", myUid), { blockedUids: arrayUnion(otherUid) }, { merge: true });
+        window.__myBlockedUids = window.__myBlockedUids || [];
+        if (!window.__myBlockedUids.includes(otherUid)) window.__myBlockedUids.push(otherUid);
+        await updateDoc(doc(db, "chats", chatIdFor(myUid, otherUid)), { deletedFor: arrayUnion(myUid) }).catch(() => {});
+      };
+
+      // 메시지 하나에 대한 내 이모지 리액션을 토글한다 (이미 눌렀으면 취소).
+      window.__toggleReaction = async function (chatId, messageId, emoji) {
+        if (!auth.currentUser) return;
+        const myUid = auth.currentUser.uid;
+        const ref = doc(db, "chats", chatId, "messages", messageId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const reactions = { ...(snap.data().reactions || {}) };
+        const list = reactions[emoji] || [];
+        const nextList = list.includes(myUid) ? list.filter((u) => u !== myUid) : [...list, myUid];
+        if (nextList.length === 0) delete reactions[emoji];
+        else reactions[emoji] = nextList;
+        await updateDoc(ref, { reactions });
       };
     </script>
 
