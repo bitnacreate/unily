@@ -3045,11 +3045,21 @@
         // 새로 렌더링한 뒤 맨 아래로 내린다. 과거 메시지를 읽고 있을 때는 스크롤 위치를 그대로 유지한다.
         function renderChatArea(opts) {
             opts = opts || {};
-            if (!currentChatId) return;
+            const chatBody = document.getElementById('chatBody');
+            if (!currentChatId) {
+                // 아직 아무 대화방도 선택 안 한 상태. HTML에 디자인용으로 박혀있던 샘플 텍스트
+                // ("Sarah Jenkins" 등)가 그대로 남아있지 않도록 헤더도 비우고 빈 상태 문구를 보여준다.
+                document.getElementById('activeAvatar').textContent = '';
+                document.getElementById('activeAvatar').style.background = 'var(--bg-alt)';
+                document.getElementById('activeName').textContent = '';
+                document.getElementById('activeUni').textContent = '';
+                document.getElementById('activeLocalTime').style.display = 'none';
+                chatBody.innerHTML = msgEmptyStateHTML();
+                return;
+            }
             const messages = window.__ACTIVE_MESSAGES || [];
             const myUid = window.__myUid ? window.__myUid() : null;
 
-            const chatBody = document.getElementById('chatBody');
             const prevScrollTop = chatBody.scrollTop;
             const prevScrollHeight = chatBody.scrollHeight;
             const wasNearBottom = opts.forceScrollBottom || (prevScrollHeight - prevScrollTop - chatBody.clientHeight < 100);
