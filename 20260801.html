@@ -1727,10 +1727,15 @@
                             <div class="post-detail-time-row" id="detailTimeRow"></div>
                         </div>
                         <button type="button" class="btn-connect" id="detailMessageBtn" style="display:none; margin-left:auto; align-self:flex-start;">메시지 보내기</button>
+                        <div style="display:flex; gap:8px; margin-left:auto; align-self:flex-start;">
+                            <button type="button" class="btn-connect" id="detailEditBtn" style="display:none;">수정</button>
+                            <button type="button" class="btn-connect" id="detailDeleteBtn" style="display:none;">삭제</button>
+                        </div>
                     </div>
 
                     <div class="post-detail-body-wrap">
                         <p class="post-detail-body" id="detailBody"></p>
+                        <textarea class="form-control" id="detailEditTextarea" style="display:none; width:100%; min-height:120px;"></textarea>
                     </div>
                     <div class="post-translate-note" id="detailTranslateNote" style="display:none;"></div>
 
@@ -3049,6 +3054,21 @@
             }
         }
 
+        // 게시글 카드/상세에서 작성자 이름·아바타를 클릭했을 때 호출 (postId만 안전하게 넘기고, 이름 등은 여기서 조회)
+        function startChatFromPost(postId) {
+            const post = CommunityService.getPostSync(postId);
+            if (!post || !post.isReal || !post.authorUid) return;
+            startChatWithUser(post.authorUid, post.authorName);
+        }
+
+        // 댓글에서 작성자 이름·아바타를 클릭했을 때 호출
+        function startChatFromComment(postId, commentId) {
+            const post = CommunityService.getPostSync(postId);
+            const comment = post ? findCommentById(post, commentId) : null;
+            if (!comment || !comment.isReal || !comment.authorUid) return;
+            startChatWithUser(comment.authorUid, comment.authorName);
+        }
+
         /* ---------- AUTH & LOCALSTORAGE LOGIC ---------- */
         let authMode = 'login'; // 'login' or 'signup'
 
@@ -3869,6 +3889,37 @@
                 comment.likes = Math.max(0, comment.likes + (liked ? 1 : -1));
                 return withDelay(comment);
             }
+            // 작성자 본인만 호출 가능(호출부에서 isMine()으로 이미 걸러짐). 실제 글이면 Firestore도 갱신.
+            function updatePost(postId, updates) {
+                const post = findPost(postId);
+                if (!post) return withDelay(null);
+                if (post.isReal && window.__fbUpdatePost) {
+                    window.__fbUpdatePost(postId, updates).catch(err => console.error('게시글 수정 동기화 실패:', err));
+                }
+                Object.assign(post, updates);
+                return withDelay(post);
+            }
+            function deletePost(postId) {
+                const post = findPost(postId);
+                if (!post) return withDelay(false);
+                if (post.isReal && window.__fbDeletePost) {
+                    window.__fbDeletePost(postId).catch(err => console.error('게시글 삭제 동기화 실패:', err));
+                } else {
+                    const idx = COMMUNITY_POSTS.indexOf(post);
+                    if (idx !== -1) COMMUNITY_POSTS.splice(idx, 1);
+                }
+                return withDelay(true);
+            }
+            function updateComment(postId, commentId, newText) {
+                const post = findPost(postId);
+                const comment = post ? findCommentById(post, commentId) : null;
+                if (!comment) return withDelay(null);
+                if (post.isReal && window.__fbUpdateComment) {
+                    window.__fbUpdateComment(postId, commentId, newText).catch(err => console.error('댓글 수정 동기화 실패:', err));
+                }
+                comment.text = newText;
+                return withDelay(comment);
+            }
             function reportContent(type, id, reason, postId) {
                 const reports = JSON.parse(localStorage.getItem('unily_community_reports') || '[]');
                 reports.push({ type, id, reason, postId, createdAt: Date.now() });
@@ -3963,6 +4014,7 @@
                 reportContent, getTrendingTopics, getPopularStudents, getRecommendedCommunities,
                 getPostDetail, getComments, getRelatedPosts, deleteComment, savePost, isPostSaved, sharePost,
                 getUserPosts, getUserComments, getSavedPosts,
+                updatePost, deletePost, updateComment,
                 getPostSync: findPost
             };
         })();
@@ -4068,6 +4120,10 @@
             const avatarInitial = isMe ? (comment.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
             const displayName = isMe ? (comment.authorName || 'You') : (author ? author.name : 'Unknown');
             const clickableProfile = !isMe && author;
+            const clickableChat = !isMe && comment.isReal && !!comment.authorUid;
+            const authorClickAttr = clickableProfile
+                ? `onclick="openStudentProfile(${author.id})"`
+                : (clickableChat ? `onclick="startChatFromComment('${postId}','${comment.id}')"` : '');
             const metaLine = author ? `${author.flag} ${author.university} · ${t(author.major)}` : '';
             const liked = isCommentLiked(comment.id);
             const shownOriginal = showOriginalSet.has('comment:' + comment.id);
@@ -4081,10 +4137,10 @@
 
             return `
               <div class="comment-item">
-                <div class="comment-avatar" style="${avatarStyle}" ${clickableProfile ? `onclick="openStudentProfile(${author.id})"` : ''}>${avatarInitial}</div>
+                <div class="comment-avatar" style="${avatarStyle}" ${authorClickAttr}>${avatarInitial}</div>
                 <div class="comment-body-wrap">
                   <div class="comment-bubble">
-                    <div class="comment-author" ${clickableProfile ? `onclick="openStudentProfile(${author.id})"` : ''}>${escapeHTML(displayName)}</div>
+                    <div class="comment-author" ${authorClickAttr}>${escapeHTML(displayName)}</div>
                     ${metaLine ? `<div class="comment-author-meta">${escapeHTML(metaLine)}</div>` : ''}
                     <div class="comment-text" id="comment-text-${comment.id}">${escapeHTML(bodyText)}</div>
                     ${needsNote ? `
@@ -4096,7 +4152,7 @@
                   <div class="comment-actions-row">
                     <button class="comment-action${liked ? ' liked' : ''}" onclick="toggleCommentLike('${comment.id}','${postId}')">${liked ? '❤️' : '🤍'} ${comment.likes}</button>
                     ${!isReply ? `<button class="comment-action" onclick="focusReply('${comment.id}','${escapeHTML(displayName).replace(/'/g, "\\'")}')">${replyText()}</button>` : ''}
-                    ${isMe ? `<button class="comment-delete-btn" onclick="deleteDetailComment('${comment.id}')">${deleteCommentText()}</button>` : `<button class="comment-action" onclick="openReportModal('comment','${comment.id}','${postId}')">🚩</button>`}
+                    ${isMe ? `<button class="comment-delete-btn" onclick="editDetailComment('${comment.id}')">수정</button><button class="comment-delete-btn" onclick="deleteDetailComment('${comment.id}')">${deleteCommentText()}</button>` : `<button class="comment-action" onclick="openReportModal('comment','${comment.id}','${postId}')">🚩</button>`}
                   </div>
                   ${repliesHTML}
                 </div>
@@ -4111,6 +4167,10 @@
             const avatarInitial = isMe ? (post.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
             const displayName = isMe ? (post.authorName || 'You') : (author ? author.name : 'Unknown');
             const clickableProfile = !isMe && author;
+            const clickableChat = !isMe && post.isReal && !!post.authorUid;
+            const authorClickAttr = clickableProfile
+                ? `onclick="event.stopPropagation(); openStudentProfile(${author.id})"`
+                : (clickableChat ? `onclick="event.stopPropagation(); startChatFromPost('${post.id}')"` : '');
             const metaParts = [];
             if (author) { metaParts.push(author.university); metaParts.push(t(author.major)); }
             const metaLine = metaParts.join(' · ');
@@ -4129,10 +4189,10 @@
             return `
               <article class="post-card" id="post-card-${post.id}" onclick="openPostDetail('${post.id}')">
                 <div class="post-card-head">
-                  <div class="post-avatar" style="${avatarStyle}" ${clickableProfile ? `onclick="event.stopPropagation(); openStudentProfile(${author.id})"` : ''}>${avatarInitial}</div>
+                  <div class="post-avatar" style="${avatarStyle}" ${authorClickAttr}>${avatarInitial}</div>
                   <div class="post-head-info">
                     <div class="post-name-row">
-                      <span class="post-author-name" ${clickableProfile ? `onclick="event.stopPropagation(); openStudentProfile(${author.id})"` : ''}>${escapeHTML(displayName)}</span>
+                      <span class="post-author-name" ${authorClickAttr}>${escapeHTML(displayName)}</span>
                       ${author ? `<span class="post-flag">${author.flag}</span>` : ''}
                       <span class="post-cat-badge">${catInfo ? catInfo.icon : ''} ${catInfo ? categoryName(catInfo.key) : ''}</span>
                     </div>
@@ -4269,6 +4329,18 @@
             renderDetailComments();
         }
 
+        async function editDetailComment(commentId) {
+            const post = CommunityService.getPostSync(currentDetailPostId);
+            const comment = post ? findCommentById(post, commentId) : null;
+            if (!comment) return;
+            const newText = prompt(await translateText('댓글 수정', currentLang), comment.text);
+            if (newText === null) return;
+            const trimmed = newText.trim();
+            if (!trimmed || trimmed === comment.text) return;
+            await CommunityService.updateComment(currentDetailPostId, commentId, trimmed);
+            renderDetailComments();
+        }
+
         function filterByTag(tag) {
             const input = document.getElementById('communitySearchInput');
             if (input) input.value = tag;
@@ -4378,22 +4450,41 @@
                 document.getElementById('detailTitle').textContent = titleText || '';
                 document.getElementById('detailBody').textContent = bodyText;
 
+                const canChat = !isMe && post.isReal && !!post.authorUid;
+                const onAuthorClick = author ? (() => openStudentProfile(author.id)) : (canChat ? (() => startChatWithUser(post.authorUid, post.authorName)) : null);
+
                 document.getElementById('detailAvatar').style.cssText = avatarStyle;
                 document.getElementById('detailAvatar').textContent = avatarInitial;
-                document.getElementById('detailAvatar').onclick = (author && !isMe) ? () => openStudentProfile(author.id) : null;
-                document.getElementById('detailAvatar').style.cursor = (author && !isMe) ? 'pointer' : 'default';
+                document.getElementById('detailAvatar').onclick = !isMe ? onAuthorClick : null;
+                document.getElementById('detailAvatar').style.cursor = (!isMe && onAuthorClick) ? 'pointer' : 'default';
                 const nameEl = document.getElementById('detailAuthorName');
                 nameEl.textContent = displayName;
-                nameEl.onclick = (author && !isMe) ? () => openStudentProfile(author.id) : null;
-                nameEl.style.cursor = (author && !isMe) ? 'pointer' : 'default';
+                nameEl.onclick = !isMe ? onAuthorClick : null;
+                nameEl.style.cursor = (!isMe && onAuthorClick) ? 'pointer' : 'default';
 
                 const msgBtn = document.getElementById('detailMessageBtn');
-                if (post.isReal && !isMe && post.authorUid) {
+                if (canChat) {
                     msgBtn.style.display = 'inline-flex';
                     msgBtn.onclick = () => startChatWithUser(post.authorUid, post.authorName);
                 } else {
                     msgBtn.style.display = 'none';
                     msgBtn.onclick = null;
+                }
+
+                // 본인 게시글에서만 수정/삭제 버튼 노출
+                document.getElementById('detailBody').style.display = '';
+                document.getElementById('detailEditTextarea').style.display = 'none';
+                const editBtn = document.getElementById('detailEditBtn');
+                const deleteBtn = document.getElementById('detailDeleteBtn');
+                if (isMe) {
+                    editBtn.style.display = 'inline-flex';
+                    editBtn.textContent = '수정';
+                    editBtn.onclick = () => toggleEditPost(post.id);
+                    deleteBtn.style.display = 'inline-flex';
+                    deleteBtn.onclick = () => deletePostFromDetail(post.id);
+                } else {
+                    editBtn.style.display = 'none';
+                    deleteBtn.style.display = 'none';
                 }
 
                 const homeInfo = author ? HOME_COUNTRY_INFO[author.country] : null;
@@ -4467,6 +4558,41 @@
                     }
                 }
             });
+        }
+
+        // 게시글 수정 모드로 전환: 본문을 textarea로 바꿔서 편집할 수 있게 한다.
+        function toggleEditPost(postId) {
+            const post = CommunityService.getPostSync(postId);
+            if (!post) return;
+            document.getElementById('detailBody').style.display = 'none';
+            const ta = document.getElementById('detailEditTextarea');
+            ta.value = post.body;
+            ta.style.display = 'block';
+
+            const editBtn = document.getElementById('detailEditBtn');
+            editBtn.textContent = '취소';
+            editBtn.onclick = () => renderPostDetail();
+
+            const deleteBtn = document.getElementById('detailDeleteBtn');
+            deleteBtn.textContent = '저장';
+            deleteBtn.onclick = () => saveEditPost(postId);
+        }
+
+        async function saveEditPost(postId) {
+            const ta = document.getElementById('detailEditTextarea');
+            const newBody = ta.value.trim();
+            if (!newBody) return;
+            const newTitle = newBody.length > 40 ? newBody.slice(0, 40).trim() + '…' : newBody;
+            await CommunityService.updatePost(postId, { body: newBody, title: newTitle });
+            renderPostDetail();
+        }
+
+        async function deletePostFromDetail(postId) {
+            const msg = await translateText('게시글을 삭제하시겠어요?', currentLang);
+            if (!confirm(msg)) return;
+            await CommunityService.deletePost(postId);
+            showPage('community');
+            renderFeed(true);
         }
 
         function renderDetailComments() {
@@ -4830,6 +4956,7 @@
         setDoc,
         addDoc,
         updateDoc,
+        deleteDoc,
         collection,
         query,
         where,
@@ -4956,6 +5083,26 @@
 
       window.__fbLikePost = function (postId, delta) {
         return updateDoc(doc(db, "posts", postId), { likes: increment(delta) });
+      };
+
+      // 작성자 본인만 호출됨(classic 스크립트 쪽에서 이미 isMine()으로 걸러짐). Firestore 규칙에서도 다시 검증한다.
+      window.__fbUpdatePost = function (postId, updates) {
+        return updateDoc(doc(db, "posts", postId), updates);
+      };
+
+      window.__fbDeletePost = function (postId) {
+        return deleteDoc(doc(db, "posts", postId));
+      };
+
+      window.__fbUpdateComment = function (postId, commentId, newText) {
+        return mutateComments(postId, (comments) => {
+          for (const c of comments) {
+            if (c.id === commentId) { c.text = newText; return; }
+            for (const r of c.replies || []) {
+              if (r.id === commentId) { r.text = newText; return; }
+            }
+          }
+        });
       };
 
       window.__fbIncrementViews = function (postId) {
