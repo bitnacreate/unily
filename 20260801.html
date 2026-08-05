@@ -3296,17 +3296,13 @@
             opts = opts || {};
             const chatBody = document.getElementById('chatBody');
             if (!currentChatId) {
-                // 아직 아무 대화방도 선택 안 한 상태. HTML에 디자인용으로 박혀있던 샘플 텍스트
-                // ("Sarah Jenkins" 등)가 그대로 남아있지 않도록 헤더도 비우고 빈 상태 문구를 보여준다.
-                document.getElementById('activeAvatar').textContent = '';
-                document.getElementById('activeAvatar').style.background = 'var(--bg-alt)';
-                document.getElementById('activeName').textContent = '';
-                document.getElementById('activeUni').textContent = '';
-                document.getElementById('activeLocalTime').style.display = 'none';
-                document.getElementById('msgHeaderActions').style.display = 'none';
+                // 아직 아무 대화방도 선택 안 한 상태. 헤더 전체(빈 프로필 사진 자리 포함)를 숨기고
+                // 빈 상태 문구만 깔끔하게 채팅 영역 전체를 채우도록 한다.
+                document.getElementById('chatHeader').style.display = 'none';
                 chatBody.innerHTML = msgEmptyStateHTML();
                 return;
             }
+            document.getElementById('chatHeader').style.display = 'flex';
             const messages = window.__ACTIVE_MESSAGES || [];
             const myUid = window.__myUid ? window.__myUid() : null;
             const chatInfo = (window.__CHATS || []).find(c => c.id === currentChatId);
