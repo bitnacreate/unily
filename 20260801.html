@@ -789,12 +789,6 @@
     padding:12px 18px; font-size:14px; outline:none; color:var(--ink);
   }
   .composer-input:focus{ border-color:var(--indigo); }
-  .composer-image-preview{ position:relative; margin-bottom:14px; border-radius:var(--radius-md); overflow:hidden; max-height:220px; }
-  .composer-image-preview img{ width:100%; max-height:220px; object-fit:cover; display:block; }
-  .composer-image-remove{
-    position:absolute; top:8px; right:8px; width:28px; height:28px; border-radius:50%;
-    border:none; background:rgba(0,0,0,.55); color:#fff; cursor:pointer; font-size:13px;
-  }
   .composer-actions{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
   .composer-actions-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:1; }
   .composer-category-wrap select{ font-size:13px; padding:9px 30px 9px 12px; width:auto; }
@@ -802,11 +796,6 @@
     border:1px solid var(--line); background:var(--bg-alt); border-radius:100px;
     padding:9px 16px; font-size:13px; outline:none; color:var(--ink); min-width:160px; flex:1;
   }
-  .composer-image-btn{
-    font-size:18px; cursor:pointer; padding:8px; border-radius:50%;
-    transition:background .15s ease; display:flex; align-items:center; justify-content:center;
-  }
-  .composer-image-btn:hover{ background:var(--bg-alt); }
 
   .community-toolbar{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
   .community-search-wrap{ flex:1; min-width:200px; }
@@ -855,7 +844,6 @@
   .post-translate-note{ font-size:12px; color:var(--ink-soft); margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .post-view-original-btn{ background:none; border:none; color:var(--indigo-deep); font-weight:700; font-size:12px; cursor:pointer; padding:0; }
   .post-view-original-btn:hover{ text-decoration:underline; }
-  .post-image{ width:100%; max-height:360px; object-fit:cover; border-radius:var(--radius-md); margin-bottom:12px; display:block; }
   .post-tags{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px; }
   .post-tag{ font-size:12px; font-weight:600; color:var(--indigo-deep); cursor:pointer; background:none; border:none; padding:0; }
   .post-tag:hover{ text-decoration:underline; }
@@ -976,7 +964,6 @@
 
   .post-detail-body-wrap{ margin-bottom:8px; }
   .post-detail-body{ font-size:15.5px; line-height:1.8; color:var(--ink); white-space:pre-wrap; }
-  .post-detail-image{ width:100%; max-height:460px; object-fit:cover; border-radius:var(--radius-md); margin-top:16px; display:block; }
   #detailTranslateNote{ font-size:12.5px; color:var(--ink-soft); margin-bottom:18px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 
   .post-detail-actions-row{ display:flex; align-items:center; gap:10px; padding-top:20px; margin-top:20px; border-top:1px dashed var(--line); flex-wrap:wrap; }
@@ -1670,19 +1657,12 @@
                         <div class="composer-avatar" id="composerAvatar">U</div>
                         <input type="text" id="composerInput" class="composer-input" data-i18n-placeholder="composer_placeholder" placeholder="어떤 이야기를 나누고 싶으세요?">
                     </div>
-                    <div class="composer-image-preview" id="composerImagePreview" style="display:none;">
-                        <img id="composerImagePreviewImg" alt="">
-                        <button type="button" class="composer-image-remove" id="composerImageRemoveBtn" aria-label="Remove image">✕</button>
-                    </div>
                     <div class="composer-actions">
                         <div class="composer-actions-left">
                             <div class="select-wrap composer-category-wrap">
                                 <select id="composerCategorySelect" aria-label="Category"></select>
                             </div>
                             <input type="text" id="composerTagsInput" class="composer-tags-input" data-i18n-placeholder="composer_tags_placeholder" placeholder="#태그 (쉼표로 구분)">
-                            <label class="composer-image-btn" for="composerImageInput" aria-label="Add image" title="Add image">
-                                🖼️<input type="file" id="composerImageInput" accept="image/*" hidden>
-                            </label>
                         </div>
                         <button class="btn-connect" id="composerSubmitBtn" data-i18n="composer_submit">게시</button>
                     </div>
@@ -1750,7 +1730,6 @@
 
                     <div class="post-detail-body-wrap">
                         <p class="post-detail-body" id="detailBody"></p>
-                        <img class="post-detail-image" id="detailImage" style="display:none;" alt="">
                     </div>
                     <div class="post-translate-note" id="detailTranslateNote" style="display:none;"></div>
 
@@ -3882,44 +3861,44 @@
         // 쓰여진 언어"이고, TranslationService가 이 값을 기준으로 번역 여부/방향을 정한다.
         const MOCK_NOW = Date.now();
         let COMMUNITY_POSTS = [
-            { id: 'p1', authorId: 1, lang: 'ko', categoryKey: 'travel', title: '파리 카페 추천 좀 해주세요', body: '파리에 괜찮은 카페 아는 사람 있나요? 다음 달에 교환학생으로 가는데 추천 좀 부탁해요!', tags: ['Travel', 'Paris'], image: null, likes: 42, views: 231, createdAt: MOCK_NOW - 3 * 60000,
+            { id: 'p1', authorId: 1, lang: 'ko', categoryKey: 'travel', title: '파리 카페 추천 좀 해주세요', body: '파리에 괜찮은 카페 아는 사람 있나요? 다음 달에 교환학생으로 가는데 추천 좀 부탁해요!', tags: ['Travel', 'Paris'], likes: 42, views: 231, createdAt: MOCK_NOW - 3 * 60000,
               comments: [
                   { id: 'c1-1', authorId: 3, lang: 'de', text: 'Ich war letztes Semester in Paris! Die kleinen Cafés im Quartier Latin waren wirklich toll.', likes: 5, createdAt: MOCK_NOW - 2 * 60000, replies: [
                       { id: 'c1-1-1', authorId: 1, lang: 'ko', text: '오 감사해요! 이름 좀 알려주실 수 있나요?', likes: 1, createdAt: MOCK_NOW - 90000 }
                   ] },
                   { id: 'c1-2', authorId: 15, lang: 'ja', text: '私もパリのカフェ情報が欲しいです!', likes: 2, createdAt: MOCK_NOW - 60000, replies: [] }
               ] },
-            { id: 'p2', authorId: 2, lang: 'pt', categoryKey: 'language-exchange', title: 'Alguém quer trocar idiomas comigo?', body: 'Alguém quer trocar português por coreano? Estou aprendendo coreano há 6 meses e adoraria praticar com alguém!', tags: ['LanguageExchange', 'Portuguese'], image: null, likes: 18, views: 96, createdAt: MOCK_NOW - 12 * 60000,
+            { id: 'p2', authorId: 2, lang: 'pt', categoryKey: 'language-exchange', title: 'Alguém quer trocar idiomas comigo?', body: 'Alguém quer trocar português por coreano? Estou aprendendo coreano há 6 meses e adoraria praticar com alguém!', tags: ['LanguageExchange', 'Portuguese'], likes: 18, views: 96, createdAt: MOCK_NOW - 12 * 60000,
               comments: [
                   { id: 'c2-1', authorId: 14, lang: 'ko', text: '저도 한국어-포르투갈어 교환하고 싶어요! 관심 있어요.', likes: 3, createdAt: MOCK_NOW - 8 * 60000, replies: [] }
               ] },
-            { id: 'p3', authorId: 3, lang: 'de', categoryKey: 'career', title: 'Tipps für ein UX-Design-Portfolio?', body: 'Ich bereite mich auf ein UX-Design-Praktikum vor. Hat jemand Tipps für ein gutes Portfolio?', tags: ['Career', 'UXDesign'], image: null, likes: 27, views: 140, createdAt: MOCK_NOW - 35 * 60000, comments: [] },
-            { id: 'p4', authorId: 5, lang: 'en', categoryKey: 'projects', title: 'Looking for hackathon teammates!', body: 'Looking for 2 more teammates for a hackathon project — building an AI study buddy app. DM me if interested!', tags: ['Hackathon', 'AI'], image: null, likes: 33, views: 178, createdAt: MOCK_NOW - 60 * 60000,
+            { id: 'p3', authorId: 3, lang: 'de', categoryKey: 'career', title: 'Tipps für ein UX-Design-Portfolio?', body: 'Ich bereite mich auf ein UX-Design-Praktikum vor. Hat jemand Tipps für ein gutes Portfolio?', tags: ['Career', 'UXDesign'], likes: 27, views: 140, createdAt: MOCK_NOW - 35 * 60000, comments: [] },
+            { id: 'p4', authorId: 5, lang: 'en', categoryKey: 'projects', title: 'Looking for hackathon teammates!', body: 'Looking for 2 more teammates for a hackathon project — building an AI study buddy app. DM me if interested!', tags: ['Hackathon', 'AI'], likes: 33, views: 178, createdAt: MOCK_NOW - 60 * 60000,
               comments: [
                   { id: 'c4-1', authorId: 11, lang: 'en', text: "I'm in! I've got some backend experience if that helps.", likes: 4, createdAt: MOCK_NOW - 50 * 60000, replies: [
                       { id: 'c4-1-1', authorId: 5, lang: 'en', text: "Perfect, let's set up a call this week.", likes: 1, createdAt: MOCK_NOW - 40 * 60000 }
                   ] }
               ] },
-            { id: 'p5', authorId: 6, lang: 'ja', categoryKey: 'culture', title: '韓国ドラマのおすすめ教えてください!', body: '韓国のドラマを見て韓国語を勉強しています。おすすめの作品があれば教えてください!', tags: ['Culture', 'Korean'], image: null, likes: 21, views: 102, createdAt: MOCK_NOW - 2 * 3600000, comments: [] },
-            { id: 'p6', authorId: 7, lang: 'fr', categoryKey: 'study-abroad', title: 'Préparatifs pour mon échange à Séoul', body: 'Je pars étudier à Séoul le semestre prochain. Des conseils pour bien se préparer ?', tags: ['StudyAbroad', 'Seoul'], image: null, likes: 15, views: 88, createdAt: MOCK_NOW - 4 * 3600000,
+            { id: 'p5', authorId: 6, lang: 'ja', categoryKey: 'culture', title: '韓国ドラマのおすすめ教えてください!', body: '韓国のドラマを見て韓国語を勉強しています。おすすめの作品があれば教えてください!', tags: ['Culture', 'Korean'], likes: 21, views: 102, createdAt: MOCK_NOW - 2 * 3600000, comments: [] },
+            { id: 'p6', authorId: 7, lang: 'fr', categoryKey: 'study-abroad', title: 'Préparatifs pour mon échange à Séoul', body: 'Je pars étudier à Séoul le semestre prochain. Des conseils pour bien se préparer ?', tags: ['StudyAbroad', 'Seoul'], likes: 15, views: 88, createdAt: MOCK_NOW - 4 * 3600000,
               comments: [
                   { id: 'c6-1', authorId: 1, lang: 'ko', text: '서울 오시면 연락주세요! 제가 캠퍼스 투어 시켜드릴게요.', likes: 6, createdAt: MOCK_NOW - 3 * 3600000, replies: [] }
               ] },
-            { id: 'p7', authorId: 8, lang: 'en', categoryKey: 'campus-life', title: 'Quiet study spots during finals?', body: "Imperial's library is packed during finals week — anyone know a quiet spot to study around campus?", tags: ['CampusLife', 'Finals'], image: null, likes: 9, views: 61, createdAt: MOCK_NOW - 6 * 3600000, comments: [] },
-            { id: 'p8', authorId: 9, lang: 'fr', categoryKey: 'food', title: 'Bon restaurant coréen près de la Sorbonne ?', body: "Quelqu'un connaît un bon resto coréen près de la Sorbonne ? J'ai une envie soudaine de bibimbap.", tags: ['Food', 'Korean'], image: null, likes: 24, views: 130, createdAt: MOCK_NOW - 8 * 3600000, comments: [] },
-            { id: 'p9', authorId: 10, lang: 'en', categoryKey: 'questions', title: 'Anyone else in the AI ethics course?', body: 'Is anyone else doing an AI ethics course this semester? Would love to compare notes.', tags: ['Questions', 'AI'], image: null, likes: 31, views: 165, createdAt: MOCK_NOW - 24 * 3600000,
+            { id: 'p7', authorId: 8, lang: 'en', categoryKey: 'campus-life', title: 'Quiet study spots during finals?', body: "Imperial's library is packed during finals week — anyone know a quiet spot to study around campus?", tags: ['CampusLife', 'Finals'], likes: 9, views: 61, createdAt: MOCK_NOW - 6 * 3600000, comments: [] },
+            { id: 'p8', authorId: 9, lang: 'fr', categoryKey: 'food', title: 'Bon restaurant coréen près de la Sorbonne ?', body: "Quelqu'un connaît un bon resto coréen près de la Sorbonne ? J'ai une envie soudaine de bibimbap.", tags: ['Food', 'Korean'], likes: 24, views: 130, createdAt: MOCK_NOW - 8 * 3600000, comments: [] },
+            { id: 'p9', authorId: 10, lang: 'en', categoryKey: 'questions', title: 'Anyone else in the AI ethics course?', body: 'Is anyone else doing an AI ethics course this semester? Would love to compare notes.', tags: ['Questions', 'AI'], likes: 31, views: 165, createdAt: MOCK_NOW - 24 * 3600000,
               comments: [
                   { id: 'c9-1', authorId: 12, lang: 'de', text: 'Ja, ich nehme auch daran teil! Lass uns Notizen vergleichen.', likes: 2, createdAt: MOCK_NOW - 20 * 3600000, replies: [] }
               ] },
-            { id: 'p10', authorId: 11, lang: 'en', categoryKey: 'internships', title: 'Tips for a fintech internship interview?', body: 'Just got an interview for a summer internship at a fintech startup in Singapore. Any tips for the interview?', tags: ['Internships', 'Singapore'], image: null, likes: 19, views: 99, createdAt: MOCK_NOW - 26 * 3600000, comments: [] },
-            { id: 'p11', authorId: 12, lang: 'de', categoryKey: 'random', title: 'Wer hat auch schon einen Roboter crashen lassen? 😅', body: 'Wer hat auch schon mal einen Roboter zum Absturz gebracht, während alle zuschauen? 😅', tags: ['Random', 'Robotics'], image: null, likes: 12, views: 70, createdAt: MOCK_NOW - 2 * 86400000, comments: [] },
-            { id: 'p12', authorId: 13, lang: 'en', categoryKey: 'language-exchange', title: 'Looking for a Korean language exchange partner', body: 'Trying to improve my Korean before my exchange semester. Looking for a language exchange partner!', tags: ['LanguageExchange', 'Korean'], image: null, likes: 22, views: 118, createdAt: MOCK_NOW - 2 * 86400000,
+            { id: 'p10', authorId: 11, lang: 'en', categoryKey: 'internships', title: 'Tips for a fintech internship interview?', body: 'Just got an interview for a summer internship at a fintech startup in Singapore. Any tips for the interview?', tags: ['Internships', 'Singapore'], likes: 19, views: 99, createdAt: MOCK_NOW - 26 * 3600000, comments: [] },
+            { id: 'p11', authorId: 12, lang: 'de', categoryKey: 'random', title: 'Wer hat auch schon einen Roboter crashen lassen? 😅', body: 'Wer hat auch schon mal einen Roboter zum Absturz gebracht, während alle zuschauen? 😅', tags: ['Random', 'Robotics'], likes: 12, views: 70, createdAt: MOCK_NOW - 2 * 86400000, comments: [] },
+            { id: 'p12', authorId: 13, lang: 'en', categoryKey: 'language-exchange', title: 'Looking for a Korean language exchange partner', body: 'Trying to improve my Korean before my exchange semester. Looking for a language exchange partner!', tags: ['LanguageExchange', 'Korean'], likes: 22, views: 118, createdAt: MOCK_NOW - 2 * 86400000,
               comments: [
                   { id: 'c12-1', authorId: 4, lang: 'ko', text: '저도 프랑스어-한국어 교환하고 싶어요! 같이 해요.', likes: 3, createdAt: MOCK_NOW - 1.5 * 86400000, replies: [] }
               ] },
-            { id: 'p13', authorId: 14, lang: 'ko', categoryKey: 'study-abroad', title: '영어 인터뷰 같이 연습하실 분?', body: '교환학생 준비 중인데 영어 인터뷰가 걱정돼요. 같이 연습할 사람 있을까요?', tags: ['StudyAbroad', 'English'], image: null, likes: 8, views: 54, createdAt: MOCK_NOW - 3 * 86400000, comments: [] },
-            { id: 'p14', authorId: 15, lang: 'ja', categoryKey: 'projects', title: 'AI言語学習アプリのフロントエンド開発者募集', body: 'AI言語学習アプリを作っています。フロントエンドが得意な人、一緒にやりませんか?', tags: ['Projects', 'AI'], image: null, likes: 16, views: 89, createdAt: MOCK_NOW - 4 * 86400000, comments: [] },
-            { id: 'p15', authorId: 16, lang: 'zh-CN', categoryKey: 'general', title: '刚加入Unily,大家好!', body: '刚加入Unily,很高兴认识大家!希望能找到一起做项目的朋友。', tags: ['General', 'NewHere'], image: null, likes: 6, views: 40, createdAt: MOCK_NOW - 5 * 86400000, comments: [] }
+            { id: 'p13', authorId: 14, lang: 'ko', categoryKey: 'study-abroad', title: '영어 인터뷰 같이 연습하실 분?', body: '교환학생 준비 중인데 영어 인터뷰가 걱정돼요. 같이 연습할 사람 있을까요?', tags: ['StudyAbroad', 'English'], likes: 8, views: 54, createdAt: MOCK_NOW - 3 * 86400000, comments: [] },
+            { id: 'p14', authorId: 15, lang: 'ja', categoryKey: 'projects', title: 'AI言語学習アプリのフロントエンド開発者募集', body: 'AI言語学習アプリを作っています。フロントエンドが得意な人、一緒にやりませんか?', tags: ['Projects', 'AI'], likes: 16, views: 89, createdAt: MOCK_NOW - 4 * 86400000, comments: [] },
+            { id: 'p15', authorId: 16, lang: 'zh-CN', categoryKey: 'general', title: '刚加入Unily,大家好!', body: '刚加入Unily,很高兴认识大家!希望能找到一起做项目的朋友。', tags: ['General', 'NewHere'], likes: 6, views: 40, createdAt: MOCK_NOW - 5 * 86400000, comments: [] }
         ];
 
         function countPostComments(post) {
@@ -4242,7 +4221,6 @@
         const showOriginalSet = new Set();
         let pendingReplyTarget = null;
         let pendingNewPosts = [];
-        let composerImageDataUrl = null;
         let currentDetailPostId = null;
 
         function getCurrentUserDisplay() {
@@ -4408,7 +4386,6 @@
 
                 ${post.title ? `<h3 class="post-title" id="post-title-${post.id}">${escapeHTML(titleText)}</h3>` : ''}
                 <p class="post-body" id="post-body-${post.id}">${escapeHTML(bodyText)}</p>
-                ${post.image ? `<img class="post-image" src="${post.image}" alt="" loading="lazy">` : ''}
                 ${needsNote ? `
                 <div class="post-translate-note" id="post-note-${post.id}">
                   <span>${shownOriginal ? '' : translatedFromLabel(post.lang)}</span>
@@ -4644,10 +4621,6 @@
                 document.getElementById('detailTitle').textContent = titleText || '';
                 document.getElementById('detailBody').textContent = bodyText;
 
-                const imgEl = document.getElementById('detailImage');
-                if (post.image) { imgEl.src = post.image; imgEl.style.display = 'block'; }
-                else { imgEl.style.display = 'none'; }
-
                 document.getElementById('detailAvatar').style.cssText = avatarStyle;
                 document.getElementById('detailAvatar').textContent = avatarInitial;
                 document.getElementById('detailAvatar').onclick = (author && !isMe) ? () => openStudentProfile(author.id) : null;
@@ -4803,22 +4776,6 @@
         }
 
         /* ---------- COMPOSER ---------- */
-        function handleComposerImageChange(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-                composerImageDataUrl = reader.result;
-                document.getElementById('composerImagePreviewImg').src = composerImageDataUrl;
-                document.getElementById('composerImagePreview').style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
-        function removeComposerImage() {
-            composerImageDataUrl = null;
-            document.getElementById('composerImageInput').value = '';
-            document.getElementById('composerImagePreview').style.display = 'none';
-        }
         function submitPost() {
             const bodyInput = document.getElementById('composerInput');
             const body = bodyInput.value.trim();
@@ -4832,13 +4789,12 @@
                 id: 'me' + Date.now(), authorId: 'me', authorName: me.name, authorInitial: me.initial,
                 lang: currentLang, categoryKey: categorySelect.value || COMMUNITY_CATEGORIES[0].key,
                 title: body.length > 40 ? body.slice(0, 40).trim() + '…' : body,
-                body, tags, image: composerImageDataUrl, likes: 0, views: 0, createdAt: Date.now(), comments: []
+                body, tags, likes: 0, views: 0, createdAt: Date.now(), comments: []
             };
             CommunityService.createPost(newPost);
 
             bodyInput.value = '';
             tagsInput.value = '';
-            removeComposerImage();
             currentCategoryKey = '';
             renderCategories();
             renderTrending();
@@ -5059,8 +5015,6 @@
                 renderFeed(true);
             });
             document.getElementById('composerSubmitBtn').addEventListener('click', submitPost);
-            document.getElementById('composerImageInput').addEventListener('change', handleComposerImageChange);
-            document.getElementById('composerImageRemoveBtn').addEventListener('click', removeComposerImage);
 
             setInterval(realtimeTick, 30000);
         }
@@ -5213,7 +5167,6 @@
           title: post.title,
           body: post.body,
           tags: post.tags || [],
-          image: post.image || null,
           likes: 0,
           views: 0,
           createdAt: serverTimestamp(),
