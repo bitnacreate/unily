@@ -404,6 +404,21 @@
   }
   .btn-join.requested:hover{ background:#fff; transform:none; box-shadow:none; }
 
+  /* ---------- 전역 에러 토스트 ---------- */
+  .toast-container {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 9999;
+    display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+    max-width: calc(100% - 32px);
+  }
+  .toast {
+    background: var(--ink); color: #fff; padding: 12px 22px; border-radius: 100px;
+    font-size: 13.5px; font-weight: 600; box-shadow: 0 15px 35px -10px rgba(0,0,0,0.35);
+    opacity: 0; transform: translateY(10px); transition: opacity .25s ease, transform .25s ease;
+    pointer-events: auto; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: #E0447A; }
+
   /* ---------- SIMPLE / JOIN PROJECT SUCCESS MODAL ---------- */
   @keyframes modalOverlayFadeIn{ from{ opacity:0; } to{ opacity:1; } }
   @keyframes modalPopIn{ from{ opacity:0; transform:translateY(16px) scale(.94); } to{ opacity:1; transform:translateY(0) scale(1); } }
@@ -2378,6 +2393,72 @@
 
     <!-- ---------- APP NAVIGATION & BUSINESS LOGIC ---------- -->
     <script>
+        /* ==================================================================
+           전역 에러 토스트: Firestore 할당량 초과, 네트워크 끊김 등 예상 못 한 에러가 나도
+           화면이 조용히 멈추는 대신 "일시적인 오류가 발생했습니다" 같은 안내가 뜨게 한다.
+           - 각 기능별로 이미 .catch()에서 개별 처리 중인 에러(로그인 실패 alert 등)는 그대로 두고,
+             이건 어디서도 안 잡힌 에러를 위한 마지막 안전망이다.
+           ================================================================== */
+        function showToast(message, type) {
+            let container = document.getElementById('toastContainer');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toastContainer';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (type === 'error' ? ' error' : '');
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3800);
+        }
+
+        // Firestore류 에러는 .code(예: 'resource-exhausted', 'unavailable')를 갖고 있어서,
+        // 있으면 조금 더 구체적인 문구로, 없으면 일반적인 문구로 안내한다.
+        function describeUnexpectedError(reason) {
+            const code = reason && reason.code;
+            if (!navigator.onLine || code === 'unavailable' || code === 'network-request-failed') {
+                return '인터넷 연결을 확인해주세요.';
+            }
+            if (code === 'resource-exhausted') {
+                return '지금 이용자가 많아 서버가 혼잡해요. 잠시 후 다시 시도해주세요.';
+            }
+            if (code === 'permission-denied') {
+                return '권한이 없는 요청이에요.';
+            }
+            return '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        }
+
+        let lastGlobalErrorToastAt = 0;
+        function showGlobalErrorToast(reason) {
+            const now = Date.now();
+            if (now - lastGlobalErrorToastAt < 4000) return; // 짧은 시간에 여러 개 터져도 토스트는 한 번만
+            lastGlobalErrorToastAt = now;
+            const fallback = describeUnexpectedError(reason);
+            if (typeof translateText === 'function' && typeof currentLang !== 'undefined') {
+                translateText(fallback, currentLang).then(msg => showToast(msg, 'error'));
+            } else {
+                showToast(fallback, 'error');
+            }
+        }
+
+        window.addEventListener('error', (e) => {
+            console.error('전역 에러:', e.error || e.message);
+            showGlobalErrorToast(e.error);
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('처리되지 않은 Promise 거부:', e.reason);
+            showGlobalErrorToast(e.reason);
+        });
+        window.addEventListener('offline', () => {
+            showToast('인터넷 연결이 끊겼어요.', 'error');
+        });
+
         // Page Switching Logic
         function showPage(pageId) {
             const wasMessages = isMessagesPageActive();
@@ -5470,6 +5551,10 @@
       import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
       import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-analytics.js";
       import {
+        initializeAppCheck,
+        ReCaptchaV3Provider,
+      } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app-check.js";
+      import {
         getAuth,
         GoogleAuthProvider,
         signInWithCredential,
@@ -5514,6 +5599,32 @@
       // Initialize Firebase
       const app = initializeApp(firebaseConfig);
       const analytics = getAnalytics(app);
+
+      /* ==================================================================
+         App Check: Firestore/AI Logic(번역) API가 정식 등록된 도메인(unily-e973f.web.app 등)
+         밖에서 페이지 소스만 복사해 악용되는 걸 막는다. 설정 안 된 프로젝트 키(firebaseConfig)는
+         원래 공개되어도 되는 값이지만(구글 web API key는 비밀값이 아님, 진짜 보호는 Security
+         Rules + App Check가 함), App Check 없이는 "누가 요청했는지"까지는 검증 못 한다.
+
+         활성화 방법 (코드 준비 완료, 아래 키만 채우면 다음 배포부터 자동 적용됨):
+         1) https://console.cloud.google.com/security/recaptcha 에서 reCAPTCHA v3 키 생성
+            - 등록 도메인: unily-e973f.web.app, unily-e973f.firebaseapp.com (+ 로컬 테스트용 localhost)
+         2) https://console.firebase.google.com/project/unily-e973f/appcheck 에서
+            위에서 만든 사이트 키로 웹 앱을 App Check에 등록
+         3) 아래 APP_CHECK_SITE_KEY에 그 사이트 키를 붙여넣고 배포
+         4) 마지막으로, 같은 Firebase 콘솔의 App Check 화면에서 Firestore와 AI Logic(Gemini) 각각에
+            "적용(Enforce)" 버튼을 눌러야 실제로 미등록 도메인의 요청이 차단되기 시작한다.
+            (이 마지막 단계는 콘솔에서만 가능해서 코드로 대신할 수 없음 - 3단계까지 끝나면 알려주면
+             같이 확인하면서 진행 가능)
+         키가 비어있는 지금은 App Check가 아예 초기화되지 않아 기존 동작에 영향 없음(안전한 기본값). ================================================================== */
+      const APP_CHECK_SITE_KEY = "";
+      if (APP_CHECK_SITE_KEY) {
+        initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+          isTokenAutoRefreshEnabled: true,
+        });
+      }
+
       const auth = getAuth(app);
       const db = getFirestore(app);
 
