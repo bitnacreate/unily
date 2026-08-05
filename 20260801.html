@@ -577,6 +577,21 @@
   .msg-subinfo { font-size: 12px; color: var(--indigo-deep); margin-bottom: 4px; font-weight: 500; }
   .msg-preview { font-size: 13px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+  /* 메시지 목록/채팅방에 내역이 하나도 없을 때 보여주는 빈 상태 화면 (인스타그램/트위터 DM 스타일) */
+  .msg-empty-state {
+    height: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 24px;
+  }
+  .msg-empty-state-icon { font-size: 38px; margin-bottom: 14px; opacity: .8; }
+  .msg-empty-state-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+  .msg-empty-state-subtitle { font-size: 13.5px; color: var(--ink-soft); max-width: 260px; line-height: 1.5; }
+
   .msg-chat-area {
     display: flex;
     flex-direction: column;
@@ -2936,6 +2951,23 @@
         // 목록/채팅방 화면에 있을 때만 실시간 구독(onSnapshot)하고, 벗어나면 즉시 구독 해제한다(showPage 참고).
         let currentChatId = null;
 
+        // 메시지 목록/채팅방에 내역이 하나도 없을 때 보여주는 빈 상태 문구 (다국어)
+        const MSG_EMPTY_TEXT = {
+            title: { ko: '아직 메시지가 없습니다', en: 'No messages yet', fr: 'Pas encore de messages', es: 'Aún no hay mensajes', de: 'Noch keine Nachrichten', ja: 'まだメッセージはありません', 'zh-CN': '暂无消息' },
+            subtitle: { ko: '메시지를 보내 대화를 시작해보세요.', en: 'Send a direct message to get the conversation started.', fr: 'Envoyez un message direct pour démarrer la conversation.', es: 'Envía un mensaje directo para iniciar la conversación.', de: 'Sende eine Direktnachricht, um das Gespräch zu beginnen.', ja: 'ダイレクトメッセージを送って会話を始めましょう。', 'zh-CN': '发送私信开始对话吧。' }
+        };
+        function msgEmptyTitleText() { return MSG_EMPTY_TEXT.title[currentLang] || MSG_EMPTY_TEXT.title.en; }
+        function msgEmptySubtitleText() { return MSG_EMPTY_TEXT.subtitle[currentLang] || MSG_EMPTY_TEXT.subtitle.en; }
+        function msgEmptyStateHTML() {
+            return `
+              <div class="msg-empty-state">
+                <div class="msg-empty-state-icon">💬</div>
+                <div class="msg-empty-state-title">${escapeHTML(msgEmptyTitleText())}</div>
+                <div class="msg-empty-state-subtitle">${escapeHTML(msgEmptySubtitleText())}</div>
+              </div>
+            `;
+        }
+
         function isMessagesPageActive() {
             const el = document.getElementById('page-messages');
             return !!(el && el.classList.contains('active'));
@@ -2957,6 +2989,10 @@
             const listEl = document.getElementById('msgList');
             if (!listEl) return;
             const chats = window.__CHATS || [];
+            if (chats.length === 0) {
+                listEl.innerHTML = msgEmptyStateHTML();
+                return;
+            }
             listEl.innerHTML = chats.map(c => `
           <div class="msg-item ${c.id === currentChatId ? 'active' : ''}" onclick="selectChat('${c.id}')">
             <div class="msg-avatar-wrap">
@@ -3017,6 +3053,11 @@
             const prevScrollTop = chatBody.scrollTop;
             const prevScrollHeight = chatBody.scrollHeight;
             const wasNearBottom = opts.forceScrollBottom || (prevScrollHeight - prevScrollTop - chatBody.clientHeight < 100);
+
+            if (messages.length === 0) {
+                chatBody.innerHTML = msgEmptyStateHTML();
+                return;
+            }
 
             chatBody.innerHTML = messages.map(m => `
           <div class="chat-bubble-wrap ${m.senderUid === myUid ? 'outgoing' : 'incoming'}">
