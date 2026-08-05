@@ -780,36 +780,23 @@
     padding: 36px 32px;
     box-shadow: 0 20px 40px -15px rgba(90,70,220,0.12);
   }
-  .auth-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
-  .auth-tab {
-    flex: 1; text-align: center; padding: 8px; font-weight: 700; font-size: 15px; color: var(--ink-soft);
-    cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s;
+  /* 구글 로그인 전용 카드: 아이콘 + 안내 문구 + 공식 구글 버튼만 깔끔하게 세로 중앙 정렬 */
+  .auth-google-only { text-align: center; padding: 6px 0 2px; }
+  .auth-google-only-icon {
+    width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--indigo), var(--mint));
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
   }
-  .auth-tab.active { color: var(--indigo-deep); border-bottom-color: var(--indigo-deep); }
-  .google-btn {
-    width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 100px; background: #fff;
-    font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 10px;
-    cursor: pointer; transition: background .18s ease; margin-bottom: 20px; color: var(--ink);
-  }
-  .google-btn:hover { background: var(--bg-alt); }
+  .auth-google-only-title { font-size: 19px; font-weight: 700; margin-bottom: 10px; }
+  .auth-google-only-notice { font-size: 13.5px; color: var(--ink-soft); margin-bottom: 28px; line-height: 1.6; }
   /* 공식 구글 로그인 버튼(GIS renderButton)이 들어갈 자리: 카드 폭에 맞춰 가운데 정렬 */
-  .google-btn-container { display: flex; justify-content: center; margin-bottom: 20px; min-height: 44px; }
-  .auth-divider {
-    display: flex; align-items: center; text-align: center; color: var(--ink-soft); font-size: 12px; margin: 20px 0;
-  }
-  .auth-divider::before, .auth-divider::after {
-    content: ''; flex: 1; border-bottom: 1px solid var(--line);
-  }
-  .auth-divider::before { margin-right: 10px; }
-  .auth-divider::after { margin-left: 10px; }
+  .google-btn-container { display: flex; justify-content: center; min-height: 44px; }
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink-soft); }
   .form-control {
     width: 100%; padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--line);
     background: var(--bg-alt); outline: none; font-size: 14px; color: var(--ink);
   }
-  .auth-actions-link { display: flex; justify-content: flex-end; margin-bottom: 20px; }
-  .forgot-link { font-size: 12.5px; color: var(--indigo-deep); font-weight: 600; cursor: pointer; }
   .auth-submit-btn {
     width: 100%; background: var(--ink); color: #fff; border: none; padding: 14px; border-radius: 100px;
     font-size: 15px; font-weight: 600; cursor: pointer; transition: background .2s;
@@ -1608,39 +1595,14 @@
     <div id="page-mypage" class="page-view wrap">
         <!-- 비로그인 상태일 때: 로그인 / 회원가입 UI -->
         <div id="authContainer" class="auth-wrapper">
-            <div class="auth-tabs">
-                <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')" data-i18n="auth_tab_login">로그인</div>
-                <div class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')" data-i18n="auth_tab_signup">회원가입</div>
+            <div class="auth-google-only">
+                <div class="auth-google-only-icon">🎓</div>
+                <h2 class="auth-google-only-title" data-i18n="auth_google_only_title">Unily에 오신 것을 환영해요</h2>
+                <p class="auth-google-only-notice" data-i18n="auth_google_only_notice">Unily는 현재 구글 로그인만 지원합니다.</p>
+                <!-- Google Identity Services가 실제 로그인 버튼을 이 컨테이너 안에 렌더링한다.
+                     (renderGoogleButton() 참고, 하단 스크립트) -->
+                <div id="googleSignInBtn" class="google-btn-container"></div>
             </div>
-
-            <!-- Google Identity Services가 실제 로그인 버튼을 이 컨테이너 안에 렌더링한다.
-                 (renderGoogleButton() 참고, 하단 스크립트) -->
-            <div id="googleSignInBtn" class="google-btn-container"></div>
-
-            <div class="auth-divider" data-i18n="auth_divider">OR</div>
-
-            <form id="authForm" onsubmit="handleAuthSubmit(event)">
-                <div class="form-group">
-                    <label for="authEmail" data-i18n="auth_email_label">학교 이메일 (.edu 또는 대학 공식 이메일)</label>
-                    <input type="email" id="authEmail" class="form-control" placeholder="student@university.edu" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="authPassword" data-i18n="auth_password_label">비밀번호</label>
-                    <input type="password" id="authPassword" class="form-control" placeholder="••••••••" required>
-                </div>
-
-                <div class="form-group" id="confirmPasswordGroup" style="display:none;">
-                    <label for="authConfirmPassword" data-i18n="auth_confirm_password_label">비밀번호 확인</label>
-                    <input type="password" id="authConfirmPassword" class="form-control" placeholder="••••••••">
-                </div>
-
-                <div class="auth-actions-link" id="forgotPassRow">
-                    <span class="forgot-link" onclick="handleForgotPassword()" data-i18n="auth_forgot_link">비밀번호를 잊으셨나요? (Forgot Password)</span>
-                </div>
-
-                <button type="submit" id="authSubmitBtn" class="auth-submit-btn" data-i18n="auth_submit_btn">로그인하기</button>
-            </form>
         </div>
 
         <!-- 로그인 상태일 때: My Unily (프로필 + 탭) -->
@@ -2036,15 +1998,8 @@
                 msg_page_desc: "전 세계 대학생들과 실시간으로 주고받은 대화 목록입니다. Instant 번역으로 편하게 대화해보세요.",
                 msg_list_title: "메시지 목록",
                 msg_send: "전송",
-                auth_tab_login: "로그인",
-                auth_tab_signup: "회원가입",
-                auth_google_btn: "Continue with Google",
-                auth_divider: "OR",
-                auth_email_label: "학교 이메일 (.edu 또는 대학 공식 이메일)",
-                auth_password_label: "비밀번호",
-                auth_confirm_password_label: "비밀번호 확인",
-                auth_forgot_link: "비밀번호를 잊으셨나요? (Forgot Password)",
-                auth_submit_btn: "로그인하기",
+                auth_google_only_title: "Unily에 오신 것을 환영해요",
+                auth_google_only_notice: "Unily는 현재 구글 로그인만 지원합니다.",
                 verified_status_label: "학교 공식 인증 상태:",
                 verified_status_value: "인증 완료됨 (Verified)",
                 profile_logout_btn: "로그아웃 (Logout)",
@@ -2147,15 +2102,8 @@
                 msg_page_desc: "Your direct messages with university students around the world. Enjoy seamless chat with Instant Translation.",
                 msg_list_title: "Messages",
                 msg_send: "Send",
-                auth_tab_login: "Log In",
-                auth_tab_signup: "Sign Up",
-                auth_google_btn: "Continue with Google",
-                auth_divider: "OR",
-                auth_email_label: "University Email (.edu or official university email)",
-                auth_password_label: "Password",
-                auth_confirm_password_label: "Confirm Password",
-                auth_forgot_link: "Forgot your password? (Forgot Password)",
-                auth_submit_btn: "Log In",
+                auth_google_only_title: "Welcome to Unily",
+                auth_google_only_notice: "Unily currently supports Google Sign-In only.",
                 verified_status_label: "School Verification Status:",
                 verified_status_value: "Verified",
                 profile_logout_btn: "Log Out",
@@ -2319,11 +2267,6 @@
                     el.placeholder = t(stripHtml(koSource));
                 }
             });
-
-            const authBtn = document.getElementById('authSubmitBtn');
-            if (authBtn) {
-                authBtn.innerText = t(authMode === 'signup' ? '회원가입 완료' : '로그인하기');
-            }
         }
 
         // 상단 언어 버튼 클릭 시 실행되는 단일 진입점.
@@ -2687,7 +2630,7 @@
                 shape: 'rectangular',
                 text: 'continue_with',
                 logo_alignment: 'left',
-                width: 300,
+                width: 320,
             });
         }
 
@@ -3442,48 +3385,8 @@
         }
 
         /* ---------- AUTH & LOCALSTORAGE LOGIC ---------- */
-        let authMode = 'login'; // 'login' or 'signup'
-
-        function switchAuthTab(mode) {
-            authMode = mode;
-            document.getElementById('tab-login').classList.toggle('active', mode === 'login');
-            document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
-            document.getElementById('confirmPasswordGroup').style.display = mode === 'signup' ? 'block' : 'none';
-            document.getElementById('forgotPassRow').style.display = mode === 'login' ? 'flex' : 'none';
-            document.getElementById('authSubmitBtn').innerText = t(mode === 'login' ? '로그인하기' : '회원가입 완료');
-        }
-
-        async function handleAuthSubmit(e) {
-            e.preventDefault();
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
-
-            if (authMode === 'signup') {
-                const confirm = document.getElementById('authConfirmPassword').value;
-                if (password !== confirm) {
-                    alert(await translateText('비밀번호가 일치하지 않습니다.', currentLang));
-                    return;
-                }
-            }
-
-            // AuthService를 통해 로그인 상태를 저장 (지금은 LocalStorage, 나중에 실제 로그인 API로 교체 가능)
-            AuthService.login({ email: email, name: email.split('@')[0] });
-            checkLoginState();
-            showPage('home'); // 로그인 성공 즉시 홈 화면으로 이동
-            const phrase = authMode === 'login' ? '성공적으로 로그인되었습니다!' : '회원가입이 완료되어 로그인되었습니다!';
-            alert(await translateText(phrase, currentLang));
-        }
-
         // 구글 로그인은 handleCredentialResponse()가 처리한다 (googleSignInBtn 클릭 → GIS → 콜백).
-
-        async function handleForgotPassword() {
-            const promptText = await translateText('비밀번호 재설정 링크를 받을 학교 이메일을 입력해 주세요:', currentLang);
-            const email = prompt(promptText);
-            if (email) {
-                const confirmPhrase = await translateText(`${email}로 비밀번호 재설정 이메일이 발송되었습니다.`, currentLang);
-                alert(confirmPhrase);
-            }
-        }
+        // Unily는 구글 로그인만 지원하므로, 여기엔 로그아웃 처리만 남아있다.
 
         async function handleLogout() {
             AuthService.logout();
