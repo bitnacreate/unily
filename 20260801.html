@@ -59,6 +59,9 @@
         380px 아주 좁은 폰에서만 나타나는 2열 배치 깨짐 보정 (join-modal-detail-row)
      ================================================================== */
   *{ box-sizing:border-box; margin:0; padding:0; }
+  /* 지금은 아바타를 전부 background-image로 쓰고 있어서(아래 .profile-avatar-lg 참고) 실제
+     <img>/<video> 태그가 없지만, 나중에 추가되더라도 레이아웃이 안 깨지도록 기본 규칙을 걸어둔다. */
+  img, video{ max-width:100%; height:auto; display:block; }
   html{ scroll-behavior:smooth; }
   body{
     background:var(--bg);
@@ -1007,7 +1010,8 @@
     box-shadow: 0 20px 40px -15px rgba(90,70,220,0.12);
   }
   .profile-avatar-lg {
-    width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg,var(--indigo),var(--mint));
+    width: clamp(56px, 9vw, 80px); aspect-ratio: 1 / 1; border-radius: 50%;
+    background: linear-gradient(135deg,var(--indigo),var(--mint)); background-size: cover; background-position: center;
     color: #fff; font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
   }
 
