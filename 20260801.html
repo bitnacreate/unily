@@ -3199,7 +3199,11 @@
         }
         function getMockMessages(chatId) {
             const record = getMockChatRecord(chatId.replace('mock-', ''));
-            return record ? record.messages : [];
+            if (!record) return [];
+            // 번역 토글 기능이 생기기 전에 만들어진 대화는 메시지에 lang이 없다. mock 대화의 모든
+            // 문구(CONNECT_GREETING/REPLY_TEMPLATES)는 항상 한국어로 쓰여 있다는 걸 확실히 알고 있으므로,
+            // 안전하게 'ko'로 보정해서 기존 대화에서도 번역 토글이 바로 보이게 한다.
+            return record.messages.map(m => m.lang ? m : { ...m, lang: 'ko' });
         }
         // renderMessagesList/selectChat/renderChatArea가 기대하는 "chat summary" 모양으로 변환.
         function mockChatToListItem(record) {
