@@ -33,6 +33,10 @@
     --fs-md:  clamp(1rem, 0.94rem + 0.35vw, 1.15rem);
     --fs-lg:  clamp(1.2rem, 1.05rem + 0.8vw, 1.5rem);
     --fs-xl:  clamp(1.5rem, 1.2rem + 1.6vw, 2.2rem);
+
+    /* 아이콘 전용 버튼(하트/닫기 등)의 최소 터치 영역. 시각적 아이콘 크기는 그대로 두고
+       클릭/터치 가능 영역만 이 크기로 강제한다(.icon-btn-tap 참고). */
+    --tap-min: 44px;
   }
 
   /* ==================================================================
@@ -183,8 +187,8 @@
   .hero-sub{ font-size:17.5px; line-height:1.6; color:var(--ink-soft); max-width:480px; margin-bottom:34px; }
   .hero-actions{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:44px;}
   .btn-primary{
-    background:var(--ink); color:#fff; padding:16px 26px; border-radius:100px;
-    font-weight:600; font-size:15.5px; display:inline-flex; align-items:center; gap:10px;
+    background:var(--ink); color:#fff; padding:clamp(13px,2.2vw,16px) clamp(20px,4vw,26px); border-radius:100px;
+    font-weight:600; font-size:var(--fs-md); display:inline-flex; align-items:center; gap:10px; min-height:var(--tap-min);
     transition:transform .18s ease, background .18s ease; border:none; cursor:pointer;
   }
   .btn-primary:hover{ background:var(--indigo-deep); transform:translateY(-2px); }
@@ -362,6 +366,17 @@
   .card-fav-btn:hover{ transform:scale(1.08); }
   .card-fav-btn.is-saved{ background:#FFEBF0; border-color:#FFC2CE; }
 
+  /* 아이콘 전용 버튼 공통 유틸 — .card-fav-btn/.msg-icon-btn/.legal-modal-close/.onboarding-close에
+     곁들여서 클릭/터치 가능 영역을 44×44px(--tap-min)로 통일한다. 시각적 아이콘 크기는 각자의
+     font-size/svg 크기를 그대로 두고, 그 아이콘을 감싸는 히트 영역만 넓히는 방식이라
+     디자인이 달라 보이지 않는다. 이 규칙이 위 클래스들보다 뒤에 있어야 width/height가 이긴다. */
+  .icon-btn-tap{
+    width:var(--tap-min); height:var(--tap-min);
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:50%; flex-shrink:0;
+  }
+  .icon-btn-tap svg{ width:1.2em; height:1.2em; font-size:18px; }
+
   /* ---------- SAVED STUDENTS (MY PAGE) ---------- */
   .saved-section{ max-width:760px; margin:0 auto 100px; }
   .saved-section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
@@ -502,7 +517,12 @@
   }
   .btn-danger-modal:not(:disabled){ opacity:1; cursor:pointer; }
   .btn-danger-modal:not(:disabled):hover{ background:#C93862; transform:translateY(-1px); }
-  @media (max-width:380px){ .join-modal-detail-row{ flex-direction:column; } }
+  @media (max-width:380px){
+    .join-modal-detail-row{ flex-direction:column; }
+    /* 아주 좁은 화면에서는 AI 프로필 배지 라벨 대신 점 하나로 축약 (studentCardHTML의 .label-text 참고) */
+    .ai-badge .label-text{ display:none; }
+    .ai-badge::before{ content:"●"; font-size:8px; }
+  }
   .card-top{ display:flex; align-items:center; gap:14px; }
   .uni-badge{
     width:52px; height:52px; border-radius:14px; flex-shrink:0;
@@ -515,8 +535,8 @@
      이모지 없이 절제된 톤(회색 배경 + 인디고 텍스트)의 캡슐형 시스템 배지로, 국내외 플랫폼에서
      "Verified"/"Beta"류 태그에 흔히 쓰이는 스타일을 참고했다. */
   .ai-badge{
-    font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
-    padding:3px 8px; border-radius:5px; line-height:1.5;
+    font-size:var(--fs-xs); font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    padding:clamp(2px,.5vw,3px) clamp(6px,1.4vw,9px); border-radius:5px; line-height:1.5;
     background:var(--bg-alt); color:var(--indigo-deep);
     border:1px solid var(--line); cursor:help; white-space:nowrap;
   }
@@ -526,7 +546,11 @@
   .tag{ font-size:12px; font-weight:600; padding:5px 11px; border-radius:100px; background:var(--bg-alt); color:var(--indigo-deep); border:1px solid var(--line); }
   .card-bio{ font-size:13.5px; color:var(--ink-soft); line-height:1.6; flex:1; }
   .card-bottom{ display:flex; align-items:center; justify-content:space-between; padding-top:14px; border-top:1px dashed var(--line); }
-  .btn-connect{ background:var(--ink); color:#fff; border:none; padding:9px 18px; border-radius:100px; font-size:13.5px; font-weight:600; cursor:pointer; }
+  .btn-connect{
+    background:var(--ink); color:#fff; border:none; border-radius:100px; font-weight:600; cursor:pointer;
+    padding:clamp(8px,1.6vw,10px) clamp(14px,3vw,20px); font-size:var(--fs-sm);
+    min-height:var(--tap-min); display:inline-flex; align-items:center; justify-content:center;
+  }
 
   /* ---------- DREAM EXCHANGE COUNTRIES ---------- */
   .dream-exchange-summary{ display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; font-size:12.5px; }
@@ -906,8 +930,10 @@
     background: var(--bg-alt); outline: none; font-size: 14px; color: var(--ink);
   }
   .auth-submit-btn {
-    width: 100%; background: var(--ink); color: #fff; border: none; padding: 14px; border-radius: 100px;
-    font-size: 15px; font-weight: 600; cursor: pointer; transition: background .2s;
+    width: 100%; background: var(--ink); color: #fff; border: none; border-radius: 100px;
+    padding: clamp(12px,2.4vw,14px) 16px; font-size: var(--fs-base); min-height: var(--tap-min);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; cursor: pointer; transition: background .2s;
   }
   .auth-submit-btn:hover { background: var(--indigo-deep); }
 
@@ -1413,7 +1439,7 @@
             </nav>
             <div class="nav-right-actions">
                 <div class="msg-icon-wrap">
-                    <button class="msg-icon-btn" id="msgIconBtn" onclick="showPage('messages')" aria-label="Messages">
+                    <button class="msg-icon-btn icon-btn-tap" id="msgIconBtn" onclick="showPage('messages')" aria-label="Messages">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
                         <span class="msg-icon-badge" id="msgNavBadge" style="display:none;">0</span>
                     </button>
@@ -1628,7 +1654,7 @@
             <div class="legal-modal">
                 <div class="legal-modal-header">
                     <h3 id="legalModalTitle">이용약관</h3>
-                    <button type="button" class="legal-modal-close" onclick="closeLegalModal()" aria-label="닫기">✕</button>
+                    <button type="button" class="legal-modal-close icon-btn-tap" onclick="closeLegalModal()" aria-label="닫기">✕</button>
                 </div>
                 <div class="legal-modal-body" id="legalModalBody"></div>
                 <div class="legal-modal-footer">
@@ -1642,7 +1668,7 @@
              뜬다. onboardingRenderStep()이 #onboardingStepBody 안쪽만 매번 다시 그린다. -->
         <div class="onboarding-overlay" id="onboardingOverlay">
             <div class="onboarding-card">
-                <button type="button" class="onboarding-close" id="onboardingCloseBtn" onclick="onboardingClose()" aria-label="나중에 하기">✕</button>
+                <button type="button" class="onboarding-close icon-btn-tap" id="onboardingCloseBtn" onclick="onboardingClose()" aria-label="나중에 하기">✕</button>
                 <div class="onboarding-progress-head" id="onboardingProgressHead">
                     <div class="onboarding-progress-track"><div class="onboarding-progress-fill" id="onboardingProgressFill"></div></div>
                     <div class="onboarding-step-label" id="onboardingStepLabel">Step 1 of 8</div>
@@ -2963,7 +2989,7 @@
             const saved = opts.previewMode ? false : isSaved(s.id);
             const cardClickAttr = opts.clickableProfile ? ` onclick="openStudentProfile(${JSON.stringify(s.id)})" style="cursor:pointer;"` : '';
             const favBtnHTML = opts.previewMode ? '' :
-                `<button class="card-fav-btn${saved ? ' is-saved' : ''}" onclick="toggleSaveStudent(${JSON.stringify(s.id)}, event)">${saved ? '♥' : '♡'}</button>`;
+                `<button class="card-fav-btn icon-btn-tap${saved ? ' is-saved' : ''}" onclick="toggleSaveStudent(${JSON.stringify(s.id)}, event)">${saved ? '♥' : '♡'}</button>`;
             const connectBtnHTML = opts.previewMode ? '' :
                 (s.isReal
                     ? `<button class="btn-connect" onclick="event.stopPropagation(); connectWithRealStudent('${s.uid}')">Connect</button>`
@@ -2972,7 +2998,7 @@
             // 실제 유저(isAiGenerated: false/undefined)에는 절대 렌더링되지 않고, students 배열 출신
             // 가상 카드(isAiGenerated: true)에만 상단에 "AI 프로필" 배지 + 안내 툴팁이 붙는다.
             const aiBadgeHTML = s.isAiGenerated
-                ? `<span class="ai-badge" title="${escapeHTML(aiBadgeText('tooltip'))}">${aiBadgeText('label')}</span>`
+                ? `<span class="ai-badge" title="${escapeHTML(aiBadgeText('tooltip'))}"><span class="label-text">${aiBadgeText('label')}</span></span>`
                 : '';
             return `
           <div class="student-card"${cardClickAttr}>
