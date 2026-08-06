@@ -1243,15 +1243,13 @@
   }
   .mypage-header-logout-btn:hover{ background:#FFEBF0; border-color:#FFC2CE; }
 
-  /* 프로필 부가 정보(국가/학교/전공/소개/관심사 등): 내용이 있을 때만 카드 아래에 표시 */
-  .mypage-profile-details{
-    background:#fff; border:1px solid var(--line); border-radius:var(--radius-md);
-    padding:22px 24px; margin-bottom:46px; text-align:left;
+  /* 내 프로필 카드 미리보기(탐색 탭 학생 카드와 동일한 .student-card를 그대로 렌더링) —
+     내용이 있을 때만 표시. 카드 자체 배경/테두리는 .student-card가 갖고 있으므로 여기선 여백만 잡는다. */
+  .mypage-profile-details{ max-width:420px; margin:0 auto 46px; text-align:left; }
+  .mypage-preview-label{
+    font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:10px;
+    display:flex; align-items:center; gap:6px;
   }
-  .mypage-meta-row{ font-size:13px; color:var(--ink-soft); }
-  .mypage-bio{ font-size:13.5px; color:var(--ink); line-height:1.6; margin-top:10px; }
-  .mypage-interests{ display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
-  .mypage-dream-countries{ display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
 
   .mypage-tabs{
     display:flex; gap:4px; background:var(--bg-alt); padding:4px; border-radius:100px;
@@ -1785,12 +1783,11 @@
                 <button class="mypage-header-logout-btn" id="mypageHeaderLogoutBtn" onclick="handleLogout()"></button>
             </div>
 
-            <!-- 국가/학교/전공/소개/관심사/드림 교환국 등 부가 정보 (내용이 있을 때만 표시) -->
+            <!-- 내 프로필 카드 미리보기: 탐색 탭에서 다른 유저에게 보이는 것과 동일한 학생 카드로 렌더링됨
+                 (buildMyStudentCard / refreshMyPageCardPreview 참고). 내용이 있을 때만 표시. -->
             <div class="mypage-profile-details" id="mypageProfileDetails">
-                <div class="mypage-meta-row" id="mypageMetaRow"></div>
-                <p class="mypage-bio" id="mypageBio"></p>
-                <div class="mypage-interests" id="mypageInterests"></div>
-                <div class="mypage-dream-countries" id="mypageDreamCountriesDisplay"></div>
+                <div class="mypage-preview-label">👀 <span data-i18n="mypage_preview_label">다른 사용자에게 내 카드가 이렇게 보입니다</span></div>
+                <div id="mypageCardPreview"></div>
             </div>
 
             <div class="mypage-tabs" id="mypageTabs">
@@ -2175,6 +2172,7 @@
                 verified_status_label: "학교 공식 인증 상태:",
                 verified_status_value: "인증 완료됨 (Verified)",
                 profile_logout_btn: "로그아웃 (Logout)",
+                mypage_preview_label: "다른 사용자에게 내 카드가 이렇게 보입니다",
                 tab_activity: "활동",
                 tab_saved_posts: "저장한 글",
                 tab_edit_profile: "프로필 수정",
@@ -2284,6 +2282,7 @@
                 verified_status_label: "School Verification Status:",
                 verified_status_value: "Verified",
                 profile_logout_btn: "Log Out",
+                mypage_preview_label: "This is how your card looks to other users",
                 tab_activity: "Activity",
                 tab_saved_posts: "Saved Posts",
                 tab_edit_profile: "Edit Profile",
@@ -2409,6 +2408,12 @@
                     set.add(s.project.role);
                     set.add(s.project.description);
                 }
+            });
+            // 실제 유저(온보딩 완료)의 자기소개/전공/관심분야도 번역 대상에 포함시킨다.
+            (window.__REAL_STUDENTS || []).forEach(u => {
+                if (u.bio) set.add(u.bio);
+                if (u.major) set.add(u.major);
+                (u.interests || []).forEach(key => set.add(categoryName(key)));
             });
             MISC_STRINGS.forEach(str => set.add(str));
             return Array.from(set);
@@ -2739,13 +2744,76 @@
         const fInterest = document.getElementById('f-interest');
         const fDreamCountry = document.getElementById('f-dream-country');
 
+        /* ---------- 실제 유저(온보딩 완료) → 학생 카드 변환 ----------
+           목업 students 배열과 같은 모양의 객체로 바꿔서 studentCardHTML() 등 기존 렌더링/필터/저장
+           로직을 그대로 재사용한다. 이름/학교/전공/자기소개 등은 사용자가 직접 입력한 값이라
+           escapeHTML로 이스케이프한 뒤에 넣는다(목업 데이터는 코드에 직접 쓴 값이라 이스케이프 불필요). */
+        const REAL_BADGE_GRADIENTS = [
+            "linear-gradient(135deg,#FF9BB3,#E24E76)", "linear-gradient(135deg,#7A70F2,#FFC2CE)",
+            "linear-gradient(135deg,#3FBFA6,#7A70F2)", "linear-gradient(135deg,#5B4FE0,#6FDCC6)",
+            "linear-gradient(135deg,#6FDCC6,#B8A9FF)", "linear-gradient(135deg,#B8A9FF,#5B4FE0)",
+            "linear-gradient(135deg,#FF6B8B,#FFC2CE)", "linear-gradient(135deg,#7A70F2,#E24E76)",
+            "linear-gradient(135deg,#3FBFA6,#5B4FE0)"
+        ];
+        function gradientForUid(uid) {
+            const key = uid || 'x';
+            let hash = 0;
+            for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+            return REAL_BADGE_GRADIENTS[hash % REAL_BADGE_GRADIENTS.length];
+        }
+        function uniShortFromName(name) {
+            if (!name) return 'UNI';
+            const words = name.trim().split(/\s+/).filter(Boolean);
+            if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
+            return words.map(w => w[0]).join('').slice(0, 5).toUpperCase();
+        }
+        // 위저드/프로필 수정에서 저장한 project({title, recruiting, deadline})를
+        // 학생 카드 프로젝트 박스가 이해하는 모양으로 변환 (마감일 → 남은 일수).
+        function realProjectForCard(p) {
+            if (!p || !p.title) return null;
+            let deadlineDays = null;
+            if (p.recruiting && p.deadline) {
+                const diffMs = new Date(p.deadline + 'T23:59:59') - new Date();
+                deadlineDays = Math.max(0, Math.ceil(diffMs / 86400000));
+            }
+            return { title: escapeHTML(p.title), recruiting: !!p.recruiting, deadlineDays };
+        }
+        function realStudentToCard(u) {
+            return {
+                id: 'real-' + u.uid,
+                uid: u.uid,
+                isReal: true,
+                name: escapeHTML(u.name || 'Unily Member'),
+                country: u.country || '',
+                flag: u.country ? flagForCountry(u.country) : '',
+                university: escapeHTML(u.university || ''),
+                uniShort: escapeHTML(uniShortFromName(u.university)),
+                major: escapeHTML(u.major || ''),
+                tags: (u.interests || []).map(key => escapeHTML(categoryName(key))),
+                bio: escapeHTML(u.bio || ''),
+                badgeGradient: gradientForUid(u.uid),
+                project: realProjectForCard(u.project),
+                dreamExchangeCountries: []
+            };
+        }
+        // 탐색 그리드/저장한 학생/프로필 모달이 공유하는 "목업 + 실제 유저" 통합 목록.
+        // 실제 유저는 온보딩 완료 순(최신이 먼저)으로 맨 앞에 오고, 로그인한 본인은 제외한다
+        // (내가 나 자신과 매칭되는 걸 볼 필요는 없으므로).
+        function allStudentCards() {
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const realCards = (window.__REAL_STUDENTS || [])
+                .filter(u => u.uid !== myUid)
+                .map(realStudentToCard);
+            return [...realCards, ...students];
+        }
+
         function render() {
             const country = fCountry.value;
             const major = fMajor.value;
             const interest = fInterest.value;
             const dreamCountry = fDreamCountry.value;
 
-            const filtered = students.filter(s => {
+            const filtered = allStudentCards().filter(s => {
                 if (country && s.country !== country) return false;
                 if (major && s.major !== major) return false;
                 if (interest && !s.tags.includes(interest)) return false;
@@ -2761,14 +2829,55 @@
             grid.innerHTML = filtered.map(s => studentCardHTML(s)).join('');
         }
 
-        // 학생 카드 하나의 HTML을 만들어주는 공용 함수 (탐색 그리드 / 마이페이지의 Saved Students 그리드에서 공유)
+        // 실제 유저 디렉터리(window.__REAL_STUDENTS)가 실시간으로 바뀔 때마다(새로 온보딩을
+        // 끝낸 학생이 생기는 등) 지금 탐색 화면을 보고 있다면 즉시 다시 그린다.
+        window.__onRealStudentsChange = function () {
+            if (document.getElementById('page-home')?.classList.contains('active')) render();
+        };
+
+        // 실제 유저의 프로젝트 박스 전용 렌더링 (mock 전용 projectBoxHTML과 달리 role/설명/모집인원이 없다).
+        function realProjectBoxHTML(s, opts) {
+            opts = opts || {};
+            const p = s.project;
+            if (!p) return '';
+            const icon = p.recruiting ? '🚀' : '📌';
+            const labelText = projectUIText(p.recruiting ? 'label_looking' : 'label_current');
+            const deadlinePill = (p.recruiting && p.deadlineDays !== null)
+                ? `<span class="project-meta-pill">⏳ ${projectDeadlineText(p.deadlineDays)}</span>` : '';
+            const connectBtn = opts.preview ? '' :
+                `<button class="btn-connect" style="width:100%; margin-top:10px;" onclick="event.stopPropagation(); connectWithRealStudent('${s.uid}')">${projectUIText('btn_join')}</button>`;
+            return `
+          <div class="project-recruit-box">
+            <div class="project-recruit-label">${icon} ${labelText}</div>
+            <div class="project-recruit-title">${p.title}</div>
+            ${deadlinePill ? `<div class="project-recruit-meta-row">${deadlinePill}</div>` : ''}
+            ${connectBtn}
+          </div>
+        `;
+        }
+
+        // 실제 유저 카드의 "Connect" 버튼: 실제 1:1 채팅을 시작한다 (mock 학생의 alert뿐인 connectStudent와 구분).
+        function connectWithRealStudent(uid) {
+            const u = (window.__REAL_STUDENTS || []).find(x => x.uid === uid);
+            startChatWithUser(uid, u ? u.name : '');
+        }
+
+        // 학생 카드 하나의 HTML을 만들어주는 공용 함수 (탐색 그리드 / 마이페이지의 Saved Students 그리드 /
+        // 내 프로필 미리보기 카드에서 공유). previewMode면 저장(하트)·Connect 버튼을 뺀 "보기 전용" 카드가 된다.
         function studentCardHTML(s, opts) {
             opts = opts || {};
-            const saved = isSaved(s.id);
-            const cardClickAttr = opts.clickableProfile ? ` onclick="openStudentProfile(${s.id})" style="cursor:pointer;"` : '';
+            const saved = opts.previewMode ? false : isSaved(s.id);
+            const cardClickAttr = opts.clickableProfile ? ` onclick="openStudentProfile(${JSON.stringify(s.id)})" style="cursor:pointer;"` : '';
+            const favBtnHTML = opts.previewMode ? '' :
+                `<button class="card-fav-btn${saved ? ' is-saved' : ''}" onclick="toggleSaveStudent(${JSON.stringify(s.id)}, event)">${saved ? '♥' : '♡'}</button>`;
+            const connectBtnHTML = opts.previewMode ? '' :
+                (s.isReal
+                    ? `<button class="btn-connect" onclick="event.stopPropagation(); connectWithRealStudent('${s.uid}')">Connect</button>`
+                    : `<button class="btn-connect" onclick="event.stopPropagation(); connectStudent('${s.name}')">Connect</button>`);
+            const projectHTML = s.project ? (s.isReal ? realProjectBoxHTML(s, { preview: opts.previewMode }) : projectBoxHTML(s)) : '';
             return `
           <div class="student-card"${cardClickAttr}>
-            <button class="card-fav-btn${saved ? ' is-saved' : ''}" onclick="toggleSaveStudent(${s.id}, event)">${saved ? '♥' : '♡'}</button>
+            ${favBtnHTML}
             <div class="card-top">
               <div class="uni-badge" style="background:${s.badgeGradient}">${s.uniShort}</div>
               <div>
@@ -2780,11 +2889,11 @@
             <div class="card-tags">${s.tags.map(tag => `<span class="tag">${t(tag)}</span>`).join('')}</div>
             <p class="card-bio">${t(s.bio)}</p>
             ${dreamExchangeSummaryHTML(s)}
-            ${sharedDreamBadgeHTML(s)}
-            ${s.project ? projectBoxHTML(s) : ''}
+            ${opts.previewMode ? '' : sharedDreamBadgeHTML(s)}
+            ${projectHTML}
             <div class="card-bottom">
               <span style="font-size:12px; color:var(--ink-soft);">${t('학교 인증 완료')}</span>
-              <button class="btn-connect" onclick="event.stopPropagation(); connectStudent('${s.name}')">Connect</button>
+              ${connectBtnHTML}
             </div>
             ${localTimeHTML(s)}
           </div>
@@ -3045,31 +3154,51 @@
             }
             setMyDreamCountries(mine);
             renderDreamCountryPicker();
-            // 내 희망 국가가 바뀌면 Common Dream Destination 배지, 마이페이지 상단 프로필 카드
-            // (mypageDreamCountriesDisplay) 둘 다 즉시 갱신되어야 한다.
+            // 내 희망 국가가 바뀌면 Common Dream Destination 배지, 마이페이지 상단 "내 카드 미리보기"
+            // 둘 다 즉시 갱신되어야 한다.
             render();
             renderSavedStudents();
-            refreshMypageDreamCountriesCard();
+            refreshMyPageCardPreview();
         }
 
-        // 마이페이지 상단 프로필 카드 안의 Dream Exchange Countries 칩만 다시 그린다.
+        // 로그인한 내 프로필(로컬 저장 값 + Dream Exchange + Firestore에 저장된 내 프로젝트)을
+        // 탐색 탭 학생 카드와 동일한 모양으로 변환한다. "다른 사용자에게 이렇게 보입니다" 미리보기,
+        // 그리고 실제로 탐색 탭에 뜨는 내 카드 둘 다 이 함수 하나에서 파생된다.
+        function buildMyStudentCard() {
+            const profile = UserService.getProfile();
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const myEntry = (window.__REAL_STUDENTS || []).find(u => u.uid === myUid);
+            return {
+                id: 'me',
+                uid: myUid,
+                isReal: true,
+                name: escapeHTML(profile.name || 'Unily Member'),
+                country: profile.country || '',
+                flag: profile.country ? flagForCountry(profile.country) : '',
+                university: escapeHTML(profile.university || ''),
+                uniShort: escapeHTML(uniShortFromName(profile.university)),
+                major: escapeHTML(profile.major || ''),
+                tags: profile.interests.map(i => escapeHTML(i)),
+                bio: escapeHTML(profile.bio || ''),
+                badgeGradient: gradientForUid(myUid || profile.name),
+                project: myEntry ? realProjectForCard(myEntry.project) : null,
+                dreamExchangeCountries: getMyDreamCountries()
+            };
+        }
+
+        // 마이페이지 상단의 "다른 사용자에게 내 카드가 이렇게 보입니다" 미리보기 카드만 다시 그린다.
         // renderMyPageProfile() 전체를 다시 부르면 프로필 수정 폼(populateEditProfileForm)까지 초기화되어
         // 사용자가 폼에 입력 중이던(아직 저장 안 한) 값이 날아가 버리므로, 이 부분만 targeted하게 갱신한다.
-        function refreshMypageDreamCountriesCard() {
+        function refreshMyPageCardPreview() {
             if (!AuthService.isLoggedIn()) return;
-            const displayEl = document.getElementById('mypageDreamCountriesDisplay');
-            if (!displayEl) return;
-            const dreamCodes = getMyDreamCountries();
-            displayEl.innerHTML = dreamCodes.map(code => {
-                const c = countryByCode(code);
-                return `<span class="dream-chip">${c ? c.flag : ''} ${countryName(code)}</span>`;
-            }).join('');
-
-            const profile = UserService.getProfile();
-            const homeInfo = HOME_COUNTRY_INFO[profile.country];
-            const hasDetails = !!homeInfo || !!profile.university || !!profile.major || !!profile.bio
-                || profile.interests.length > 0 || dreamCodes.length > 0;
-            document.getElementById('mypageProfileDetails').style.display = hasDetails ? 'block' : 'none';
+            const wrapEl = document.getElementById('mypageProfileDetails');
+            const previewEl = document.getElementById('mypageCardPreview');
+            if (!wrapEl || !previewEl) return;
+            const card = buildMyStudentCard();
+            const hasDetails = !!(card.university || card.major || card.bio || card.tags.length
+                || card.country || card.dreamExchangeCountries.length);
+            wrapEl.style.display = hasDetails ? 'block' : 'none';
+            previewEl.innerHTML = hasDetails ? studentCardHTML(card, { previewMode: true }) : '';
         }
 
         /* ---------- SAVED STUDENTS (즐겨찾기) ---------- */
@@ -3103,7 +3232,7 @@
             if (!gridEl) return;
 
             const ids = getSavedStudentIds();
-            const saved = students.filter(s => ids.includes(s.id));
+            const saved = allStudentCards().filter(s => ids.includes(s.id));
             badgeEl.innerText = saved.length;
 
             if (saved.length === 0) {
@@ -3119,7 +3248,7 @@
         let currentProfileStudentId = null;
 
         function openStudentProfile(id) {
-            const s = students.find(x => x.id === id);
+            const s = allStudentCards().find(x => x.id === id);
             if (!s) return;
             currentProfileStudentId = id;
 
@@ -3133,9 +3262,9 @@
             document.getElementById('modalBio').innerText = t(s.bio);
             document.getElementById('modalDreamCountries').innerHTML = profileDreamCountriesHTML(s);
             document.getElementById('modalProjects').innerHTML = s.project
-                ? projectBoxHTML(s, { currentProject: true, showDescription: true })
+                ? (s.isReal ? realProjectBoxHTML(s) : projectBoxHTML(s, { currentProject: true, showDescription: true }))
                 : '';
-            document.getElementById('modalConnectBtn').onclick = () => connectStudent(s.name);
+            document.getElementById('modalConnectBtn').onclick = () => s.isReal ? connectWithRealStudent(s.uid) : connectStudent(s.name);
             document.getElementById('profileModalOverlay').classList.add('active');
         }
 
@@ -4146,27 +4275,7 @@
             document.getElementById('userName').innerText = profile.name;
             document.getElementById('userEmail').innerText = profile.email;
 
-            const homeInfo = HOME_COUNTRY_INFO[profile.country];
-            const metaParts = [];
-            if (homeInfo) metaParts.push(`${flagForCountry(profile.country)} ${homeInfo.names[currentLang] || homeInfo.names.en}`);
-            if (profile.university) metaParts.push(profile.university);
-            if (profile.major) metaParts.push(profile.major);
-            document.getElementById('mypageMetaRow').textContent = metaParts.join(' · ');
-
-            const bioEl = document.getElementById('mypageBio');
-            bioEl.textContent = profile.bio;
-            bioEl.style.display = profile.bio ? 'block' : 'none';
-
-            document.getElementById('mypageInterests').innerHTML = profile.interests.map(i => `<span class="tag">${escapeHTML(i)}</span>`).join('');
-
-            const dreamCodes = getMyDreamCountries();
-            document.getElementById('mypageDreamCountriesDisplay').innerHTML = dreamCodes.map(code => {
-                const c = countryByCode(code);
-                return `<span class="dream-chip">${c ? c.flag : ''} ${countryName(code)}</span>`;
-            }).join('');
-
-            const hasDetails = metaParts.length > 0 || !!profile.bio || profile.interests.length > 0 || dreamCodes.length > 0;
-            document.getElementById('mypageProfileDetails').style.display = hasDetails ? 'block' : 'none';
+            refreshMyPageCardPreview();
 
             renderActivityTab();
             renderSavedPostsTab();
@@ -4264,17 +4373,19 @@
         }
         async function submitEditProfile() {
             const interests = document.getElementById('editInterestsInput').value.split(',').map(s => s.trim()).filter(Boolean);
-            UserService.updateProfile({
-                name: document.getElementById('editNameInput').value.trim() || getCurrentUserDisplay().name,
-                bio: document.getElementById('editBioInput').value.trim(),
-                country: document.getElementById('editCountrySelect').value,
-                university: document.getElementById('editUniversityInput').value.trim(),
-                major: document.getElementById('editMajorInput').value.trim(),
-                interests,
-                avatar: editAvatarDataUrl
-            });
+            const name = document.getElementById('editNameInput').value.trim() || getCurrentUserDisplay().name;
+            const bio = document.getElementById('editBioInput').value.trim();
+            const country = document.getElementById('editCountrySelect').value;
+            const university = document.getElementById('editUniversityInput').value.trim();
+            const major = document.getElementById('editMajorInput').value.trim();
+            UserService.updateProfile({ name, bio, country, university, major, interests, avatar: editAvatarDataUrl });
             renderMyPageProfile();
             if (typeof refreshComposerAvatar === 'function') refreshComposerAvatar();
+            // 온보딩을 통해 이미 Firestore에 카드가 있는 유저라면, 탐색 탭에서 다른 사람에게 보이는
+            // 내 카드도 최신 내용으로 함께 갱신한다 (실패해도 로컬 저장은 이미 끝났으니 조용히 무시).
+            if (window.__fbUpdateProfileFields) {
+                window.__fbUpdateProfileFields({ name, bio, country, university, major, interests });
+            }
             alert(await translateText('프로필이 저장되었습니다!', currentLang));
         }
 
@@ -6164,6 +6275,7 @@
       };
 
       // 온보딩 위저드(클래식 스크립트)가 마지막 단계에서 호출: 입력한 프로필을 users/{uid}에 저장.
+      // onboardingCompletedAt은 탐색 탭에 새로 온보딩을 끝낸 학생이 맨 앞에 뜨도록 정렬하는 기준이 된다.
       window.__fbSaveOnboarding = async function (data) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
         await updateDoc(doc(db, "users", auth.currentUser.uid), {
@@ -6175,7 +6287,21 @@
           interests: data.interests,
           project: data.project,
           onboardingComplete: true,
+          onboardingCompletedAt: serverTimestamp(),
         });
+      };
+
+      // 온보딩을 마친 뒤 "프로필 수정" 탭에서 다시 정보를 바꿀 때도 탐색 탭의 학생 카드(다른 유저에게
+      // 보이는 내 카드)가 최신 상태를 반영하도록, 같은 필드를 users/{uid}에도 함께 반영한다.
+      // (온보딩을 아직 안 끝낸 유저가 호출할 일은 없지만, 혹시 몰라 실패해도 조용히 무시한다 —
+      //  로컬 프로필 저장 자체는 이미 끝난 뒤라 사용자 경험에는 영향이 없다.)
+      window.__fbUpdateProfileFields = async function (fields) {
+        if (!auth.currentUser) return;
+        try {
+          await updateDoc(doc(db, "users", auth.currentUser.uid), fields);
+        } catch (err) {
+          console.error("프로필 Firestore 동기화 실패:", err);
+        }
       };
 
       // 현재 로그인한 Firebase 유저의 uid (미로그인 시 null). CommunityService의 isMine() 판별에 사용.
@@ -6210,6 +6336,23 @@
         });
         if (typeof window.__onRealPostsChange === "function") window.__onRealPostsChange();
       });
+
+      /* ==================================================================
+         실제 학생 디렉터리 (탐색 탭 "전세계 매칭 탐색") — onboardingComplete인 유저만 실시간 구독.
+         - window.__REAL_STUDENTS: 온보딩을 끝낸 실제 유저 배열 (최신 완료 순).
+         - 클래식 스크립트(realStudentToCard)가 이 배열을 목업 students 배열과 합쳐서 카드로 그린다.
+         ================================================================== */
+      window.__REAL_STUDENTS = [];
+      onSnapshot(
+        query(collection(db, "users"), where("onboardingComplete", "==", true), orderBy("onboardingCompletedAt", "desc")),
+        (snap) => {
+          window.__REAL_STUDENTS = snap.docs.map((d) => {
+            const data = d.data();
+            return { ...data, uid: d.id, onboardingCompletedAt: toMillis(data.onboardingCompletedAt) };
+          });
+          if (typeof window.__onRealStudentsChange === "function") window.__onRealStudentsChange();
+        }
+      );
 
       window.__fbCreatePost = async function (post) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
