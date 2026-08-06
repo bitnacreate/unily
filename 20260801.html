@@ -854,6 +854,70 @@
   }
   .auth-submit-btn:hover { background: var(--indigo-deep); }
 
+  /* ---------- 최초 로그인 온보딩 위저드 ---------- */
+  .onboarding-overlay {
+    position: fixed; inset: 0; z-index: 600; display: none; align-items: center; justify-content: center;
+    background: rgba(36,31,56,0.55); padding: 20px;
+  }
+  .onboarding-overlay.active { display: flex; animation: modalOverlayFadeIn .18s ease; }
+  .onboarding-card {
+    position: relative; background: #fff; width: 100%; max-width: 460px; max-height: 88vh;
+    border-radius: var(--radius-lg); box-shadow: 0 30px 60px -20px rgba(30,20,60,.4);
+    display: flex; flex-direction: column; overflow: hidden;
+    animation: modalPopIn .28s cubic-bezier(.16,1,.3,1);
+  }
+  .onboarding-close {
+    position: absolute; top: 14px; right: 16px; z-index: 2; border: none; background: none;
+    font-size: 15px; cursor: pointer; color: var(--ink-faint, var(--ink-soft)); padding: 6px 9px; border-radius: 8px;
+  }
+  .onboarding-close:hover { background: var(--bg-alt); color: var(--ink); }
+  .onboarding-progress-head { padding: 26px 26px 0; flex-shrink: 0; }
+  .onboarding-progress-track { height: 5px; border-radius: 100px; background: var(--line); overflow: hidden; }
+  .onboarding-progress-fill {
+    height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--indigo), var(--mint));
+    transition: width .32s cubic-bezier(.16,1,.3,1); width: 12.5%;
+  }
+  .onboarding-step-label { margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--ink-faint, var(--ink-soft)); letter-spacing: .03em; }
+  .onboarding-body { padding: 22px 26px 6px; overflow-y: auto; animation: onboardingStepIn .22s ease; }
+  @keyframes onboardingStepIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+  .onboarding-icon { font-size: 34px; margin-bottom: 12px; }
+  .onboarding-title { font-size: 19px; font-weight: 700; color: var(--ink); margin: 0 0 6px; }
+  .onboarding-sub { font-size: 13px; color: var(--ink-soft); margin: 0 0 20px; line-height: 1.6; }
+  .onboarding-textarea-counter { text-align: right; font-size: 11.5px; color: var(--ink-faint, var(--ink-soft)); margin-top: 6px; }
+  .onboarding-chip-grid { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 4px; }
+  .onboarding-error { font-size: 12.5px; color: var(--coral); margin-top: 8px; display: none; }
+  .onboarding-error.active { display: block; }
+  .onboarding-recruit-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-md); margin-top: 4px;
+  }
+  .onboarding-recruit-row label { font-size: 13.5px; font-weight: 600; color: var(--ink); margin: 0; }
+  .onboarding-complete { text-align: center; padding: 18px 0 8px; }
+  .onboarding-complete .onboarding-icon { font-size: 52px; animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes onboardingCelebrate { 0% { transform: scale(.4) rotate(-15deg); opacity: 0; } 60% { transform: scale(1.15) rotate(6deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+  .onboarding-complete .onboarding-title { font-size: 21px; margin-top: 6px; }
+  .onboarding-nav {
+    display: flex; align-items: center; gap: 10px; padding: 18px 26px 26px; flex-shrink: 0;
+  }
+  .onboarding-back-btn {
+    background: none; border: 1px solid var(--line); color: var(--ink-soft); padding: 13px 18px;
+    border-radius: 100px; font-size: 14px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+  }
+  .onboarding-back-btn:hover { background: var(--bg-alt); }
+  .onboarding-back-btn[hidden] { display: none; }
+  .onboarding-skip-btn {
+    background: none; border: none; color: var(--ink-faint, var(--ink-soft)); font-size: 13px; font-weight: 600;
+    cursor: pointer; padding: 13px 10px; text-decoration: underline; flex-shrink: 0;
+  }
+  .onboarding-skip-btn[hidden] { display: none; }
+  .onboarding-next-btn {
+    flex: 1; background: var(--ink); color: #fff; border: none; padding: 14px; border-radius: 100px;
+    font-size: 15px; font-weight: 700; cursor: pointer; transition: background .2s, opacity .2s;
+  }
+  .onboarding-next-btn:hover { background: var(--indigo-deep); }
+  .onboarding-next-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .onboarding-next-btn.full-width { width: 100%; }
+
   .profile-card-view {
     max-width: 500px; margin: 60px auto 100px; background: #fff; border: 1px solid var(--line);
     border-radius: var(--radius-lg); padding: 36px; text-align: center;
@@ -1514,6 +1578,25 @@
                 <div class="legal-modal-body" id="legalModalBody"></div>
                 <div class="legal-modal-footer">
                     <button type="button" class="btn-primary-modal" onclick="closeLegalModal()" data-i18n="legal_modal_close_btn">확인했습니다</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---------- 최초 로그인 온보딩 위저드 ----------
+             구글 로그인이 처음이거나(onboardingComplete가 false) 아직 끝내지 않은 유저에게만
+             뜬다. onboardingRenderStep()이 #onboardingStepBody 안쪽만 매번 다시 그린다. -->
+        <div class="onboarding-overlay" id="onboardingOverlay">
+            <div class="onboarding-card">
+                <button type="button" class="onboarding-close" id="onboardingCloseBtn" onclick="onboardingClose()" aria-label="나중에 하기">✕</button>
+                <div class="onboarding-progress-head" id="onboardingProgressHead">
+                    <div class="onboarding-progress-track"><div class="onboarding-progress-fill" id="onboardingProgressFill"></div></div>
+                    <div class="onboarding-step-label" id="onboardingStepLabel">Step 1 of 8</div>
+                </div>
+                <div class="onboarding-body" id="onboardingStepBody"></div>
+                <div class="onboarding-nav" id="onboardingNav">
+                    <button type="button" class="onboarding-back-btn" id="onboardingBackBtn" onclick="onboardingBack()">이전</button>
+                    <button type="button" class="onboarding-skip-btn" id="onboardingSkipBtn" onclick="onboardingSkipProject()">건너뛰기</button>
+                    <button type="button" class="onboarding-next-btn" id="onboardingNextBtn" onclick="onboardingNext()">다음</button>
                 </div>
             </div>
         </div>
@@ -2775,13 +2858,24 @@
             AuthService.login(googleUser);
             checkLoginState(); // 상태 중심 렌더링: 로그인 상태에 맞춰 화면 전체를 다시 그림 (화면 노출)
             showPage('home');
-            alert(await translateText('Google 계정으로 로그인되었습니다.', currentLang));
 
-            // Firebase Auth 로그인 + Firestore users 컬렉션에 유저 문서 자동 생성
+            // Firebase Auth 로그인 + Firestore users 컬렉션에 유저 문서 자동 생성.
+            // 신규 유저이거나(또는 예전에 위저드를 끝까지 안 끝낸 유저라면) 로그인 성공 알림 대신
+            // 초기 프로필 설정 위저드를 띄운다 — 위저드 자체가 로그인 성공의 확인 역할을 한다.
+            let needsOnboarding = false;
             if (window.syncUserToFirebase) {
-                window.syncUserToFirebase(idToken).catch((err) => {
+                try {
+                    const syncResult = await window.syncUserToFirebase(idToken);
+                    needsOnboarding = !!(syncResult && syncResult.needsOnboarding);
+                } catch (err) {
                     console.error('Firebase 연동 실패:', err);
-                });
+                }
+            }
+
+            if (needsOnboarding) {
+                onboardingOpen();
+            } else {
+                alert(await translateText('Google 계정으로 로그인되었습니다.', currentLang));
             }
         }
 
@@ -3669,6 +3763,283 @@
             if (continueBtn) continueBtn.disabled = true;
             if (gate) gate.style.display = 'block';
             if (step) step.style.display = 'none';
+        }
+
+        /* ==================================================================
+           최초 로그인 온보딩 위저드
+           - handleCredentialResponse()가 구글 로그인 직후(needsOnboarding===true일 때) onboardingOpen()을 호출.
+           - 단계별로 onboardingStepHTML(step)이 #onboardingStepBody를 통째로 다시 그린다(SPA 프레임워크 없이
+             이 파일 전체가 쓰는 "innerHTML 재렌더링" 패턴을 그대로 따름).
+           - 1~6단계는 필수, 7단계(프로젝트/모집)만 선택 사항 + 건너뛰기 버튼 제공.
+           - 7단계를 넘어갈 때(다음 또는 건너뛰기) 그 시점에만 Firestore에 한 번에 저장한다.
+           ================================================================== */
+        const ONBOARDING_TOTAL_STEPS = 8;
+        let onboardingStep = 1;
+        let onboardingData = { name: '', studentEmail: '', university: '', major: '', bio: '', interests: [], project: null };
+
+        function onboardingOpen() {
+            onboardingStep = 1;
+            onboardingData = { name: '', studentEmail: '', university: '', major: '', bio: '', interests: [], project: null };
+            const profile = UserService.getProfile();
+            if (profile.name && profile.name !== 'Unily Member') onboardingData.name = profile.name;
+            document.getElementById('onboardingOverlay').classList.add('active');
+            onboardingRenderStep();
+        }
+
+        function onboardingClose() {
+            document.getElementById('onboardingOverlay').classList.remove('active');
+        }
+
+        function onboardingHandleKeydown(event) {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const nextBtn = document.getElementById('onboardingNextBtn');
+            if (nextBtn && !nextBtn.disabled) onboardingNext();
+        }
+
+        function onboardingStepHTML(step) {
+            const d = onboardingData;
+            if (step === 1) {
+                return `
+                    <div class="onboarding-icon">👋</div>
+                    <h3 class="onboarding-title">이름을 알려주세요</h3>
+                    <p class="onboarding-sub">학생증에 기재된 실명을 기재해 주세요.</p>
+                    <div class="form-group">
+                        <input type="text" id="onbName" class="form-control" placeholder="예: 김유니" value="${escapeHTML(d.name)}" oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)" autofocus>
+                    </div>`;
+            }
+            if (step === 2) {
+                return `
+                    <div class="onboarding-icon">🎓</div>
+                    <h3 class="onboarding-title">학생 계정 이메일을 입력해주세요</h3>
+                    <p class="onboarding-sub">학교 도메인 이메일(예: @university.ac.kr, @university.edu)만 인증돼요.</p>
+                    <div class="form-group">
+                        <input type="email" id="onbEmail" class="form-control" placeholder="you@university.ac.kr" value="${escapeHTML(d.studentEmail)}" oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)">
+                    </div>
+                    <div class="onboarding-error" id="onboardingEmailError">학교 도메인 이메일 형식이 아니에요.</div>`;
+            }
+            if (step === 3) {
+                return `
+                    <div class="onboarding-icon">🏫</div>
+                    <h3 class="onboarding-title">어느 학교에 재학 중이신가요?</h3>
+                    <p class="onboarding-sub">대학교 또는 기관명을 입력해주세요.</p>
+                    <div class="form-group">
+                        <input type="text" id="onbUniversity" class="form-control" placeholder="예: Seoul National University" value="${escapeHTML(d.university)}" oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)">
+                    </div>`;
+            }
+            if (step === 4) {
+                return `
+                    <div class="onboarding-icon">📚</div>
+                    <h3 class="onboarding-title">전공 또는 학부를 알려주세요</h3>
+                    <div class="form-group">
+                        <input type="text" id="onbMajor" class="form-control" placeholder="예: 컴퓨터공학과" value="${escapeHTML(d.major)}" oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)">
+                    </div>`;
+            }
+            if (step === 5) {
+                return `
+                    <div class="onboarding-icon">✍️</div>
+                    <h3 class="onboarding-title">자기소개를 작성해주세요</h3>
+                    <div class="form-group">
+                        <textarea id="onbBio" class="form-control" rows="4" maxlength="300" oninput="onboardingUpdateBioCounter()">${escapeHTML(d.bio)}</textarea>
+                        <div class="onboarding-textarea-counter"><span id="onboardingBioCount">${d.bio.length}</span>/300</div>
+                    </div>`;
+            }
+            if (step === 6) {
+                return `
+                    <div class="onboarding-icon">✨</div>
+                    <h3 class="onboarding-title">관심 분야를 선택해주세요</h3>
+                    <p class="onboarding-sub">커뮤니티에서 자주 보고 싶은 주제를 골라주세요. (최소 1개)</p>
+                    <div class="onboarding-chip-grid" id="onboardingInterestGrid"></div>`;
+            }
+            if (step === 7) {
+                const project = d.project || {};
+                return `
+                    <div class="onboarding-icon">🚀</div>
+                    <h3 class="onboarding-title">진행 중인 프로젝트가 있나요?</h3>
+                    <p class="onboarding-sub">선택 사항이에요. 나중에 마이페이지에서 다시 추가할 수 있어요.</p>
+                    <div class="form-group">
+                        <label>프로젝트명</label>
+                        <input type="text" id="onbProjectTitle" class="form-control" placeholder="예: 유학생 매칭 앱 팀원 모집" value="${escapeHTML(project.title || '')}" onkeydown="onboardingHandleKeydown(event)">
+                    </div>
+                    <div class="onboarding-recruit-row">
+                        <label for="onbRecruiting">팀원을 모집 중이에요</label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="onbRecruiting" onchange="onboardingToggleRecruiting()" ${project.recruiting ? 'checked' : ''}>
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="onbDeadlineGroup" style="margin-top:14px; ${project.recruiting ? '' : 'display:none;'}">
+                        <label>모집 마감일</label>
+                        <input type="date" id="onbDeadline" class="form-control" value="${escapeHTML(project.deadline || '')}">
+                    </div>`;
+            }
+            // step 8: 완료 화면
+            return `
+                <div class="onboarding-complete">
+                    <div class="onboarding-icon">🎉</div>
+                    <h3 class="onboarding-title">프로필 설정이 완료되었습니다.</h3>
+                    <p class="onboarding-sub">이제 Unily의 모든 기능을 이용할 수 있어요.</p>
+                </div>`;
+        }
+
+        function onboardingRenderInterestGrid() {
+            const grid = document.getElementById('onboardingInterestGrid');
+            if (!grid) return;
+            grid.innerHTML = COMMUNITY_CATEGORIES.map(cat => {
+                const active = onboardingData.interests.includes(cat.key);
+                return `<button type="button" class="dream-chip${active ? ' active' : ''}" onclick="onboardingToggleInterest('${cat.key}')">${cat.icon} ${categoryName(cat.key)}</button>`;
+            }).join('');
+        }
+
+        function onboardingToggleInterest(key) {
+            const idx = onboardingData.interests.indexOf(key);
+            if (idx >= 0) onboardingData.interests.splice(idx, 1);
+            else onboardingData.interests.push(key);
+            onboardingRenderInterestGrid();
+            onboardingValidateStep();
+        }
+
+        function onboardingUpdateBioCounter() {
+            const textarea = document.getElementById('onbBio');
+            const counter = document.getElementById('onboardingBioCount');
+            if (!textarea || !counter) return;
+            counter.textContent = textarea.value.length;
+            onboardingValidateStep();
+        }
+
+        function onboardingToggleRecruiting() {
+            const checked = document.getElementById('onbRecruiting').checked;
+            const group = document.getElementById('onbDeadlineGroup');
+            if (group) group.style.display = checked ? '' : 'none';
+        }
+
+        function onboardingRenderChrome() {
+            const complete = onboardingStep >= ONBOARDING_TOTAL_STEPS;
+            document.getElementById('onboardingProgressHead').style.display = complete ? 'none' : 'block';
+            document.getElementById('onboardingCloseBtn').style.display = complete ? 'none' : 'block';
+            document.getElementById('onboardingProgressFill').style.width = (onboardingStep / ONBOARDING_TOTAL_STEPS * 100) + '%';
+            document.getElementById('onboardingStepLabel').textContent = `Step ${Math.min(onboardingStep, ONBOARDING_TOTAL_STEPS)} of ${ONBOARDING_TOTAL_STEPS}`;
+
+            const backBtn = document.getElementById('onboardingBackBtn');
+            const skipBtn = document.getElementById('onboardingSkipBtn');
+            const nextBtn = document.getElementById('onboardingNextBtn');
+            backBtn.hidden = onboardingStep <= 1 || complete;
+            skipBtn.hidden = onboardingStep !== 7;
+            nextBtn.classList.toggle('full-width', complete);
+            nextBtn.textContent = complete ? '시작하기' : '다음';
+        }
+
+        // 다음/이전 단계로 넘어가기 전에 현재 화면에 입력된 값을 onboardingData에 반영해둔다
+        // (재렌더링마다 DOM을 통째로 새로 그리기 때문에, 넘어가기 직전에 캡처해야 값이 안 날아간다).
+        function onboardingCaptureCurrentStep() {
+            if (onboardingStep === 1) {
+                onboardingData.name = document.getElementById('onbName').value.trim();
+            } else if (onboardingStep === 2) {
+                onboardingData.studentEmail = document.getElementById('onbEmail').value.trim();
+            } else if (onboardingStep === 3) {
+                onboardingData.university = document.getElementById('onbUniversity').value.trim();
+            } else if (onboardingStep === 4) {
+                onboardingData.major = document.getElementById('onbMajor').value.trim();
+            } else if (onboardingStep === 5) {
+                onboardingData.bio = document.getElementById('onbBio').value.trim();
+            } else if (onboardingStep === 7) {
+                const title = document.getElementById('onbProjectTitle').value.trim();
+                const recruiting = document.getElementById('onbRecruiting').checked;
+                const deadline = document.getElementById('onbDeadline') ? document.getElementById('onbDeadline').value : '';
+                onboardingData.project = (title || recruiting) ? { title, recruiting, deadline: recruiting ? deadline : '' } : null;
+            }
+        }
+
+        // 현재 단계의 필수값이 채워졌는지 확인해 [다음] 버튼 활성/비활성을 결정한다.
+        function onboardingValidateStep() {
+            const nextBtn = document.getElementById('onboardingNextBtn');
+            if (!nextBtn) return;
+            let valid = true;
+            const emailError = document.getElementById('onboardingEmailError');
+            if (onboardingStep === 1) {
+                valid = document.getElementById('onbName').value.trim() !== '';
+            } else if (onboardingStep === 2) {
+                const email = document.getElementById('onbEmail').value.trim();
+                valid = email !== '' && isUniversityEmail(email);
+                if (emailError) emailError.classList.toggle('active', email !== '' && !valid);
+            } else if (onboardingStep === 3) {
+                valid = document.getElementById('onbUniversity').value.trim() !== '';
+            } else if (onboardingStep === 4) {
+                valid = document.getElementById('onbMajor').value.trim() !== '';
+            } else if (onboardingStep === 5) {
+                valid = document.getElementById('onbBio').value.trim() !== '';
+            } else if (onboardingStep === 6) {
+                valid = onboardingData.interests.length > 0;
+            }
+            // 7단계(선택 사항)와 8단계(완료 화면)는 항상 다음으로 넘어갈 수 있다.
+            nextBtn.disabled = !valid;
+        }
+
+        function onboardingRenderStep() {
+            document.getElementById('onboardingStepBody').innerHTML = onboardingStepHTML(onboardingStep);
+            onboardingRenderChrome();
+            if (onboardingStep === 6) onboardingRenderInterestGrid();
+            onboardingValidateStep();
+        }
+
+        function onboardingBack() {
+            if (onboardingStep <= 1) return;
+            onboardingCaptureCurrentStep();
+            onboardingStep--;
+            onboardingRenderStep();
+        }
+
+        async function onboardingNext() {
+            onboardingCaptureCurrentStep();
+            const nextBtn = document.getElementById('onboardingNextBtn');
+            if (nextBtn.disabled) return;
+
+            if (onboardingStep >= ONBOARDING_TOTAL_STEPS) {
+                onboardingClose();
+                return;
+            }
+            if (onboardingStep === 7) {
+                await onboardingPersistAndAdvance();
+                return;
+            }
+            onboardingStep++;
+            onboardingRenderStep();
+        }
+
+        async function onboardingSkipProject() {
+            onboardingData.project = null;
+            await onboardingPersistAndAdvance();
+        }
+
+        // 7단계(프로젝트/모집)를 다음 또는 건너뛰기로 넘어갈 때만 Firestore에 한 번에 저장한다.
+        async function onboardingPersistAndAdvance() {
+            const nextBtn = document.getElementById('onboardingNextBtn');
+            const skipBtn = document.getElementById('onboardingSkipBtn');
+            const originalLabel = nextBtn.textContent;
+            nextBtn.disabled = true;
+            nextBtn.textContent = '저장 중...';
+            if (skipBtn) skipBtn.disabled = true;
+            try {
+                if (window.__fbSaveOnboarding) {
+                    await window.__fbSaveOnboarding(onboardingData);
+                }
+                UserService.updateProfile({
+                    name: onboardingData.name,
+                    university: onboardingData.university,
+                    major: onboardingData.major,
+                    bio: onboardingData.bio,
+                    interests: onboardingData.interests.map(key => categoryName(key)),
+                });
+                if (typeof renderMyPageProfile === 'function') renderMyPageProfile();
+                onboardingStep = ONBOARDING_TOTAL_STEPS;
+                onboardingRenderStep();
+            } catch (err) {
+                console.error('온보딩 저장 실패:', err);
+                showToast(await translateText('저장에 실패했어요. 다시 시도해주세요.', currentLang), 'error');
+                nextBtn.disabled = false;
+                nextBtn.textContent = originalLabel;
+                if (skipBtn) skipBtn.disabled = false;
+            }
         }
 
         /* ---------- AUTH & LOCALSTORAGE LOGIC ---------- */
@@ -5734,7 +6105,9 @@
       };
 
       // handleCredentialResponse(위쪽 스크립트)에서 구글 로그인 성공 시 호출됨:
-      // Google ID 토큰으로 Firebase Auth 로그인 + Firestore users 컬렉션에 유저 문서 자동 생성
+      // Google ID 토큰으로 Firebase Auth 로그인 + Firestore users 컬렉션에 유저 문서 자동 생성.
+      // 반환하는 needsOnboarding으로 "초기 프로필 설정 위저드"를 띄울지 판단한다(신규 유저이거나,
+      // 예전에 위저드를 끝내지 않고 중간에 닫은 유저 둘 다 해당).
       window.syncUserToFirebase = async function (idToken) {
         const credential = GoogleAuthProvider.credential(idToken);
         const result = await signInWithCredential(auth, credential);
@@ -5742,14 +6115,35 @@
 
         const userRef = doc(db, "users", uid);
         const snap = await getDoc(userRef);
+        let data;
         if (!snap.exists()) {
-          await setDoc(userRef, {
+          data = {
             name: result.user.displayName,
             email: result.user.email,
             picture: result.user.photoURL,
             createdAt: serverTimestamp(),
-          });
+            onboardingComplete: false,
+          };
+          await setDoc(userRef, data);
+        } else {
+          data = snap.data();
         }
+        return { uid, needsOnboarding: data.onboardingComplete !== true };
+      };
+
+      // 온보딩 위저드(클래식 스크립트)가 마지막 단계에서 호출: 입력한 프로필을 users/{uid}에 저장.
+      window.__fbSaveOnboarding = async function (data) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+          name: data.name,
+          studentEmail: data.studentEmail,
+          university: data.university,
+          major: data.major,
+          bio: data.bio,
+          interests: data.interests,
+          project: data.project,
+          onboardingComplete: true,
+        });
       };
 
       // 현재 로그인한 Firebase 유저의 uid (미로그인 시 null). CommunityService의 isMine() 판별에 사용.
