@@ -22,6 +22,17 @@
     --line:#E3DEF6;
     --radius-lg:28px;
     --radius-md:18px;
+
+    /* ---- Fluid Typography 스케일 (clamp: 최소값, 뷰포트 비례값, 최대값) ----
+       화면이 좁아져도 완전히 작아지지 않고, 넓어져도 과하게 커지지 않도록 상하한을 둔다.
+       제목/숫자류처럼 화면 폭에 비례해 자연스러운 것들에 적용하고, 본문 텍스트는
+       가독성을 위해 좁은 범위(--fs-sm/--fs-base) 안에서만 움직이게 한다. */
+    --fs-xs:  clamp(0.72rem, 0.68rem + 0.2vw, 0.8rem);
+    --fs-sm:  clamp(0.82rem, 0.78rem + 0.2vw, 0.9rem);
+    --fs-base:clamp(0.9rem, 0.86rem + 0.25vw, 1rem);
+    --fs-md:  clamp(1rem, 0.94rem + 0.35vw, 1.15rem);
+    --fs-lg:  clamp(1.2rem, 1.05rem + 0.8vw, 1.5rem);
+    --fs-xl:  clamp(1.5rem, 1.2rem + 1.6vw, 2.2rem);
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html{ scroll-behavior:smooth; }
@@ -479,7 +490,7 @@
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:#fff;
   }
   .card-name-row{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
-  .card-name{ font-size:16.5px; font-weight:700; }
+  .card-name{ font-size:var(--fs-md); font-weight:700; }
   /* students 배열 출신 가상 카드에만 붙는 "AI 생성" 식별 배지. 실제 유저 카드에는 절대 렌더링되지 않음.
      이모지 없이 절제된 톤(회색 배경 + 인디고 텍스트)의 캡슐형 시스템 배지로, 국내외 플랫폼에서
      "Verified"/"Beta"류 태그에 흔히 쓰이는 스타일을 참고했다. */
@@ -907,7 +918,7 @@
   .onboarding-body { padding: 22px 26px 6px; overflow-y: auto; animation: onboardingStepIn .22s ease; }
   @keyframes onboardingStepIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
   .onboarding-icon { font-size: 34px; margin-bottom: 12px; }
-  .onboarding-title { font-size: 19px; font-weight: 700; color: var(--ink); margin: 0 0 6px; }
+  .onboarding-title { font-size: var(--fs-md); font-weight: 700; color: var(--ink); margin: 0 0 6px; }
   .onboarding-sub { font-size: 13px; color: var(--ink-soft); margin: 0 0 20px; line-height: 1.6; }
   .onboarding-textarea-counter { text-align: right; font-size: 11.5px; color: var(--ink-faint, var(--ink-soft)); margin-top: 6px; }
   .onboarding-chip-grid { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 4px; }
@@ -921,7 +932,7 @@
   .onboarding-complete { text-align: center; padding: 18px 0 8px; }
   .onboarding-complete .onboarding-icon { font-size: 52px; animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1); }
   @keyframes onboardingCelebrate { 0% { transform: scale(.4) rotate(-15deg); opacity: 0; } 60% { transform: scale(1.15) rotate(6deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
-  .onboarding-complete .onboarding-title { font-size: 21px; margin-top: 6px; }
+  .onboarding-complete .onboarding-title { font-size: var(--fs-lg); margin-top: 6px; }
   .onboarding-nav {
     display: flex; align-items: center; gap: 10px; padding: 18px 26px 26px; flex-shrink: 0;
   }
@@ -1256,7 +1267,7 @@
     gap:14px; text-align:center;
   }
   .mypage-profile-card .profile-avatar-lg{ margin:0; flex-shrink:0; }
-  .mypage-name{ font-size:21px; font-weight:700; letter-spacing:-0.01em; }
+  .mypage-name{ font-size:var(--fs-lg); font-weight:700; letter-spacing:-0.01em; }
   .mypage-email{ font-size:13.5px; color:var(--ink-soft); }
   .mypage-verified-box{
     background:var(--bg-alt); padding:8px 16px; border-radius:100px;
