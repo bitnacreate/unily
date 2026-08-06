@@ -456,6 +456,21 @@
     font-weight:600; font-size:14px; cursor:pointer; transition:background .18s ease, transform .12s ease;
   }
   .btn-primary-modal:hover{ background:var(--indigo-deep); transform:translateY(-1px); }
+  /* 회원 탈퇴: 실수로 누르지 않도록 로그아웃(테두리만 있는 은은한 빨강)보다 한 단계 더 명확한
+     위험 색상(채워진 빨강)을 쓰되, 설정 탭 안에서는 무채색 텍스트 버튼으로 절제되게 둔다. */
+  .settings-delete-account-btn{
+    width:100%; padding:12px; margin-top:10px; background:none; border:none;
+    color:var(--ink-faint,var(--ink-soft)); font-size:13px; font-weight:600; cursor:pointer;
+    transition:color .15s ease;
+  }
+  .settings-delete-account-btn:hover{ color:#E24E76; }
+  .btn-danger-modal{
+    width:100%; background:#E24E76; color:#fff; border:none; padding:12px; border-radius:100px;
+    font-weight:700; font-size:14px; opacity:.4; cursor:not-allowed;
+    transition:background .18s ease, opacity .18s ease, transform .12s ease;
+  }
+  .btn-danger-modal:not(:disabled){ opacity:1; cursor:pointer; }
+  .btn-danger-modal:not(:disabled):hover{ background:#C93862; transform:translateY(-1px); }
   @media (max-width:380px){ .join-modal-detail-row{ flex-direction:column; } }
   .card-top{ display:flex; align-items:center; gap:14px; }
   .uni-badge{
@@ -1885,6 +1900,26 @@
                     <div class="settings-lang-btns" id="settingsLangBtns"></div>
                 </div>
                 <button class="btn-reset" onclick="handleLogout()" style="width:100%; padding:12px; font-weight:700; color:#E24E76; border-color:#FFC2CE; margin-top:16px;" data-i18n="profile_logout_btn">로그아웃 (Logout)</button>
+                <button type="button" class="settings-delete-account-btn" onclick="openDeleteAccountModal()" data-i18n="settings_delete_account_btn">회원 탈퇴</button>
+            </div>
+        </div>
+
+        <!-- ---------- 회원 탈퇴 확인 모달 ---------- -->
+        <div class="simple-modal-overlay" id="deleteAccountModalOverlay" onclick="if(event.target === this) closeDeleteAccountModal()">
+            <div class="simple-modal">
+                <div class="simple-modal-icon">⚠️</div>
+                <div class="simple-modal-title" data-i18n="delete_account_title">정말 탈퇴하시겠어요?</div>
+                <p class="simple-modal-desc" data-i18n="delete_account_desc">탈퇴 시 기존 프로필 카드, 작성한 프로젝트, 수집된 모든 정보가 영구적으로 삭제되며 복구할 수 없습니다.</p>
+                <div class="form-group" style="text-align:left;">
+                    <label data-i18n="delete_account_confirm_label">계속하려면 "탈퇴합니다"를 입력해주세요</label>
+                    <input type="text" id="deleteAccountConfirmInput" class="form-control" oninput="onDeleteAccountConfirmInput()" autocomplete="off">
+                </div>
+                <div id="deleteReauthSection" style="display:none; margin-bottom:14px;">
+                    <p class="simple-modal-desc" style="margin-bottom:10px;" data-i18n="delete_account_reauth_desc">보안을 위해 재로그인이 한 번 더 필요해요.</p>
+                    <div id="deleteReauthGoogleBtn" class="google-btn-container"></div>
+                </div>
+                <button type="button" class="btn-danger-modal" id="deleteAccountConfirmBtn" disabled onclick="confirmDeleteAccount()" data-i18n="delete_account_confirm_btn">계정 영구 삭제</button>
+                <button type="button" class="btn-reset" style="width:100%; margin-top:10px;" onclick="closeDeleteAccountModal()" data-i18n="delete_account_cancel_btn">취소</button>
             </div>
         </div>
 
@@ -2184,6 +2219,13 @@
                 verified_status_value: "인증 완료됨 (Verified)",
                 profile_logout_btn: "로그아웃 (Logout)",
                 mypage_preview_label: "다른 사용자에게 내 카드가 이렇게 보입니다",
+                settings_delete_account_btn: "회원 탈퇴",
+                delete_account_title: "정말 탈퇴하시겠어요?",
+                delete_account_desc: "탈퇴 시 기존 프로필 카드, 작성한 프로젝트, 수집된 모든 정보가 영구적으로 삭제되며 복구할 수 없습니다.",
+                delete_account_confirm_label: '계속하려면 "탈퇴합니다"를 입력해주세요',
+                delete_account_reauth_desc: "보안을 위해 재로그인이 한 번 더 필요해요.",
+                delete_account_confirm_btn: "계정 영구 삭제",
+                delete_account_cancel_btn: "취소",
                 tab_activity: "활동",
                 tab_saved_posts: "저장한 글",
                 tab_edit_profile: "프로필 수정",
@@ -2294,6 +2336,13 @@
                 verified_status_value: "Verified",
                 profile_logout_btn: "Log Out",
                 mypage_preview_label: "This is how your card looks to other users",
+                settings_delete_account_btn: "Delete Account",
+                delete_account_title: "Are you sure you want to leave?",
+                delete_account_desc: "Deleting your account permanently removes your profile card, any projects you posted, and all collected information — this can't be undone.",
+                delete_account_confirm_label: 'Type "탈퇴합니다" to continue',
+                delete_account_reauth_desc: "For security, please sign in again to confirm.",
+                delete_account_confirm_btn: "Permanently Delete Account",
+                delete_account_cancel_btn: "Cancel",
                 tab_activity: "Activity",
                 tab_saved_posts: "Saved Posts",
                 tab_edit_profile: "Edit Profile",
@@ -2970,6 +3019,15 @@
         // 구글 로그인에 성공하면 Google Identity Services가 이 함수를 자동으로 호출한다.
         async function handleCredentialResponse(response) {
             const idToken = response.credential;
+
+            // 회원 탈퇴 중 auth/requires-recent-login 에러로 재인증을 기다리고 있었다면, 이 구글 로그인은
+            // 일반 로그인이 아니라 그 재인증이다 — 평소 로그인 흐름(위저드/알림 등)을 타지 않고 바로 탈퇴를 이어간다.
+            if (pendingReauthForDeletion) {
+                pendingReauthForDeletion = false;
+                await completeAccountDeletionAfterReauth(idToken);
+                return;
+            }
+
             const payload = decodeJwtPayload(idToken);
 
             const googleUser = {
@@ -4264,6 +4322,94 @@
             checkLoginState();
             showPage('home'); // 로그아웃 후 홈 화면으로 이동
             alert(await translateText('로그아웃되었습니다.', currentLang));
+        }
+
+        /* ==================================================================
+           회원 탈퇴 — 확인 모달 열기/검증 → Firestore users/{uid} 문서 + Firebase Auth 계정 삭제.
+           최근 로그인 시간이 오래돼 auth/requires-recent-login 에러가 나면, 모달 안에 구글
+           재로그인 버튼을 다시 렌더링해 재인증부터 받은 뒤 삭제를 이어서 진행한다
+           (pendingReauthForDeletion 플래그 → handleCredentialResponse가 분기 처리).
+           ================================================================== */
+        const DELETE_ACCOUNT_CONFIRM_PHRASE = '탈퇴합니다';
+        let pendingReauthForDeletion = false;
+
+        function openDeleteAccountModal() {
+            document.getElementById('deleteAccountConfirmInput').value = '';
+            document.getElementById('deleteAccountConfirmBtn').disabled = true;
+            document.getElementById('deleteReauthSection').style.display = 'none';
+            document.getElementById('deleteAccountModalOverlay').classList.add('active');
+        }
+        function closeDeleteAccountModal() {
+            document.getElementById('deleteAccountModalOverlay').classList.remove('active');
+            pendingReauthForDeletion = false;
+        }
+        function onDeleteAccountConfirmInput() {
+            const typed = document.getElementById('deleteAccountConfirmInput').value.trim();
+            document.getElementById('deleteAccountConfirmBtn').disabled = typed !== DELETE_ACCOUNT_CONFIRM_PHRASE;
+        }
+
+        async function confirmDeleteAccount() {
+            const btn = document.getElementById('deleteAccountConfirmBtn');
+            if (btn.disabled) return;
+            const originalLabel = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '처리 중...';
+            try {
+                await runAccountDeletion();
+            } catch (err) {
+                if (err && err.code === 'auth/requires-recent-login') {
+                    // Firestore 문서는 이미 지워졌을 수도 있는 시점이라(deleteDoc은 recent-login 제약이
+                    // 없어 먼저 성공함), 여기선 Auth 계정 삭제만 재시도하면 된다. 구글 버튼을 모달 안에
+                    // 다시 렌더링해 재인증을 받는다.
+                    document.getElementById('deleteReauthSection').style.display = 'block';
+                    pendingReauthForDeletion = true;
+                    if (typeof renderGoogleButton === 'function') {
+                        const container = document.getElementById('deleteReauthGoogleBtn');
+                        container.innerHTML = '';
+                        google.accounts.id.renderButton(container, {
+                            type: 'standard', theme: 'outline', size: 'large',
+                            shape: 'rectangular', text: 'continue_with', logo_alignment: 'left', width: 280,
+                        });
+                    }
+                    btn.textContent = originalLabel;
+                    btn.disabled = false;
+                } else {
+                    console.error('회원 탈퇴 실패:', err);
+                    showToast(await translateText('탈퇴 처리 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.', currentLang), 'error');
+                    btn.textContent = originalLabel;
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        // 구글 재인증 콜백(handleCredentialResponse)에서 pendingReauthForDeletion === true일 때 호출.
+        async function completeAccountDeletionAfterReauth(idToken) {
+            try {
+                await window.__fbReauthAndDeleteAccount(idToken);
+                finishAccountDeletion();
+            } catch (err) {
+                console.error('재인증 후 탈퇴 실패:', err);
+                closeDeleteAccountModal();
+                showToast(await translateText('탈퇴 처리 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.', currentLang), 'error');
+            }
+        }
+
+        async function runAccountDeletion() {
+            if (!window.__fbDeleteAccount) throw new Error('Firebase 연동이 준비되지 않았습니다.');
+            await window.__fbDeleteAccount();
+            finishAccountDeletion();
+        }
+
+        // Firestore/Auth 삭제가 끝난 뒤 공통으로 실행: 로컬 세션 정리 + 홈으로 리다이렉트 + 성공 토스트.
+        async function finishAccountDeletion() {
+            closeDeleteAccountModal();
+            AuthService.logout();
+            if (window.google && google.accounts && google.accounts.id) {
+                google.accounts.id.disableAutoSelect();
+            }
+            checkLoginState();
+            showPage('home');
+            showToast(await translateText('성공적으로 탈퇴되었습니다.', currentLang), 'success');
         }
 
         /* ==================================================================
@@ -6192,6 +6338,8 @@
         getAuth,
         GoogleAuthProvider,
         signInWithCredential,
+        reauthenticateWithCredential,
+        deleteUser,
         onAuthStateChanged,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
       import {
@@ -6360,6 +6508,36 @@
         } catch (err) {
           console.error("프로필 Firestore 동기화 실패:", err);
         }
+      };
+
+      /* ==================================================================
+         회원 탈퇴 — users/{uid} 문서 삭제 + Firebase Auth 계정 삭제.
+         - deleteDoc은 "최근 로그인" 제약이 없어 먼저 지워도 안전하다(온보딩 유무와 무관하게 존재하는 문서).
+         - deleteUser(auth.currentUser)는 세션이 오래됐으면 auth/requires-recent-login으로 거부될 수 있어,
+           그 에러는 그대로 클래식 스크립트로 던져 재인증 흐름(구글 버튼 재렌더링)을 타게 한다.
+         - 탐색 탭 카드는 별도 처리가 필요 없다: window.__REAL_STUDENTS는 onboardingComplete==true 조건의
+           실시간 구독이라, 문서가 삭제되는 순간 리스너가 자동으로 갱신되어 카드가 사라진다.
+         ================================================================== */
+      window.__fbDeleteAccount = async function () {
+        if (!auth.currentUser) throw new Error("로그인이 필요합니다.");
+        const uid = auth.currentUser.uid;
+        await deleteDoc(doc(db, "users", uid)).catch((err) => {
+          console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
+        });
+        await deleteUser(auth.currentUser);
+      };
+
+      // auth/requires-recent-login으로 실패한 뒤, 구글 재로그인으로 얻은 새 idToken으로 재인증하고
+      // 탈퇴를 이어서 완료한다.
+      window.__fbReauthAndDeleteAccount = async function (idToken) {
+        if (!auth.currentUser) throw new Error("로그인이 필요합니다.");
+        const credential = GoogleAuthProvider.credential(idToken);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+        const uid = auth.currentUser.uid;
+        await deleteDoc(doc(db, "users", uid)).catch((err) => {
+          console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
+        });
+        await deleteUser(auth.currentUser);
       };
 
       // 현재 로그인한 Firebase 유저의 uid (미로그인 시 null). CommunityService의 isMine() 판별에 사용.
