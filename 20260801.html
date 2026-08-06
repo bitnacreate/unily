@@ -131,7 +131,7 @@
     border-bottom:1px solid var(--line);
   }
   .nav-inner{ display:flex; align-items:center; justify-content:space-between; height:76px; }
-  .brand{ display:flex; align-items:center; gap:9px; font-weight:700; font-size:20px; letter-spacing:-0.02em; cursor:pointer; }
+  .brand{ display:flex; align-items:center; gap:9px; font-weight:700; font-size:clamp(17px,2.4vw,20px); letter-spacing:-0.02em; cursor:pointer; }
   .brand-mark{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--indigo),var(--mint)); position:relative; flex-shrink:0;}
   .brand-mark::after{ content:""; position:absolute; inset:8px; border-radius:50%; border:2px solid #fff; }
   .nav-links{ display:flex; gap:34px; font-size:15px; font-weight:500; color:var(--ink-soft); }
@@ -198,7 +198,7 @@
   .btn-primary svg{ width:16px; height:16px; }
 
   .hero-stats{ display:flex; gap:34px; flex-wrap:wrap; }
-  .stat-num{ font-size:26px; font-weight:700; letter-spacing:-0.02em; }
+  .stat-num{ font-size:clamp(20px,3vw,26px); font-weight:700; letter-spacing:-0.02em; }
   .stat-label{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
 
   /* GLOBE CARD */
@@ -240,14 +240,15 @@
     box-shadow: 0 10px 30px -15px rgba(90,70,220,0.05);
   }
   .why-icon{
-    width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
-    margin-bottom: 24px; font-size: 20px;
+    width: clamp(40px,6vw,48px); aspect-ratio:1/1; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 24px; font-size: clamp(16px,2.8vw,20px);
   }
+  .why-icon svg{ width:1.1em; height:1.1em; }
   .icon-purple{ background: #EFEBFB; color: #7A70F2; }
   .icon-mint{ background: #E8F9F5; color: #2CBDA1; }
   .icon-pink{ background: #FFEBF0; color: #FF6B8B; }
 
-  .why-card-title{ font-size: 19px; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.01em; }
+  .why-card-title{ font-size: var(--fs-md); font-weight: 700; margin-bottom: 12px; letter-spacing: -0.01em; }
   .why-card-desc{ font-size: 14.5px; color: var(--ink-soft); line-height: 1.6; margin-bottom: 32px; }
   .why-card-footer{
     padding-top: 18px; border-top: 1px dashed var(--line);
@@ -383,7 +384,7 @@
   /* ---------- SAVED STUDENTS (MY PAGE) ---------- */
   .saved-section{ max-width:760px; margin:0 auto 100px; }
   .saved-section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
-  .saved-section-title{ font-size:19px; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .saved-section-title{ font-size:var(--fs-md); font-weight:700; display:flex; align-items:center; gap:10px; }
   .saved-count-badge{
     background:var(--bg-alt); color:var(--indigo-deep); border:1px solid var(--line);
     font-size:12.5px; font-weight:700; padding:3px 11px; border-radius:100px;
@@ -413,7 +414,7 @@
     display:flex; align-items:center; justify-content:center; font-weight:700; font-size:20px;
     font-family:'Space Grotesk',sans-serif;
   }
-  .profile-modal-name{ font-size:20px; font-weight:700; margin-bottom:4px; }
+  .profile-modal-name{ font-size:clamp(17px,2.6vw,20px); font-weight:700; margin-bottom:4px; }
   .profile-modal-uni{ font-size:13.5px; color:var(--ink-soft); margin-bottom:16px; }
   .profile-modal-tags{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin-bottom:16px; }
   .profile-modal-bio{ font-size:14px; color:var(--ink-soft); line-height:1.6; margin-bottom:22px; text-align:left; }
@@ -486,7 +487,7 @@
     background:#fff; width:100%; max-width:360px; border-radius:var(--radius-lg);
     padding:32px 28px; text-align:center; box-shadow:0 30px 60px -20px rgba(30,20,60,.4);
   }
-  .simple-modal-icon{ font-size:36px; margin-bottom:12px; }
+  .simple-modal-icon{ font-size:clamp(28px,5vw,36px); margin-bottom:12px; }
   .simple-modal-title{ font-size:18px; font-weight:700; margin-bottom:8px; }
   .simple-modal-desc{ font-size:13.5px; color:var(--ink-soft); line-height:1.6; margin-bottom:20px; }
   .join-modal-detail-row{ display:flex; gap:10px; margin-bottom:24px; }
@@ -717,7 +718,7 @@
     text-align: center;
     padding: 40px 24px;
   }
-  .msg-empty-state-icon { font-size: 38px; margin-bottom: 14px; opacity: .8; }
+  .msg-empty-state-icon { font-size: clamp(28px,5.5vw,38px); margin-bottom: 14px; opacity: .8; }
   .msg-empty-state-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
   .msg-empty-state-subtitle { font-size: 13.5px; color: var(--ink-soft); max-width: 260px; line-height: 1.5; }
 
@@ -738,7 +739,7 @@
   .msg-header-actions { position: relative; flex-shrink: 0; }
   .msg-more-btn {
     border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer;
-    color: var(--ink-soft); padding: 6px 8px; border-radius: 8px;
+    color: var(--ink-soft);
   }
   .msg-more-btn:hover { background: var(--bg-alt); color: var(--ink); }
   .msg-more-menu {
@@ -882,11 +883,11 @@
   /* 구글 로그인 전용 카드: 아이콘 + 안내 문구 + 공식 구글 버튼만 깔끔하게 세로 중앙 정렬 */
   .auth-google-only { text-align: center; padding: 6px 0 2px; }
   .auth-google-only-icon {
-    width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 50%;
+    width: clamp(46px,7vw,56px); aspect-ratio:1/1; margin: 0 auto 20px; border-radius: 50%;
     background: linear-gradient(135deg, var(--indigo), var(--mint));
-    display: flex; align-items: center; justify-content: center; font-size: 26px;
+    display: flex; align-items: center; justify-content: center; font-size: clamp(20px,3.5vw,26px);
   }
-  .auth-google-only-title { font-size: 19px; font-weight: 700; margin-bottom: 10px; }
+  .auth-google-only-title { font-size: var(--fs-md); font-weight: 700; margin-bottom: 10px; }
   .auth-google-only-notice { font-size: 13.5px; color: var(--ink-soft); margin-bottom: 28px; line-height: 1.6; }
   /* 공식 구글 로그인 버튼(GIS renderButton)이 들어갈 자리: 카드 폭에 맞춰 가운데 정렬 */
   .google-btn-container { display: flex; justify-content: center; min-height: 44px; }
@@ -966,7 +967,7 @@
   .onboarding-step-label { margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--ink-faint, var(--ink-soft)); letter-spacing: .03em; }
   .onboarding-body { padding: 22px 26px 6px; overflow-y: auto; animation: onboardingStepIn .22s ease; }
   @keyframes onboardingStepIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
-  .onboarding-icon { font-size: 34px; margin-bottom: 12px; }
+  .onboarding-icon { font-size: clamp(26px,4vw,34px); margin-bottom: 12px; }
   .onboarding-title { font-size: var(--fs-md); font-weight: 700; color: var(--ink); margin: 0 0 6px; }
   .onboarding-sub { font-size: 13px; color: var(--ink-soft); margin: 0 0 20px; line-height: 1.6; }
   .onboarding-textarea-counter { text-align: right; font-size: 11.5px; color: var(--ink-faint, var(--ink-soft)); margin-top: 6px; }
@@ -979,7 +980,7 @@
   }
   .onboarding-recruit-row label { font-size: 13.5px; font-weight: 600; color: var(--ink); margin: 0; }
   .onboarding-complete { text-align: center; padding: 18px 0 8px; }
-  .onboarding-complete .onboarding-icon { font-size: 52px; animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1); }
+  .onboarding-complete .onboarding-icon { font-size: clamp(38px,7vw,52px); animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1); }
   @keyframes onboardingCelebrate { 0% { transform: scale(.4) rotate(-15deg); opacity: 0; } 60% { transform: scale(1.15) rotate(6deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
   .onboarding-complete .onboarding-title { font-size: var(--fs-lg); margin-top: 6px; }
   .onboarding-nav {
@@ -1012,7 +1013,7 @@
   .profile-avatar-lg {
     width: clamp(56px, 9vw, 80px); aspect-ratio: 1 / 1; border-radius: 50%;
     background: linear-gradient(135deg,var(--indigo),var(--mint)); background-size: cover; background-position: center;
-    color: #fff; font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
+    color: #fff; font-size: clamp(20px,3.5vw,28px); font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
   }
 
   footer{ border-top:1px solid var(--line); padding:44px 0; background: #fff; }
@@ -1517,7 +1518,7 @@
                     <div class="why-card">
                         <div>
                             <div class="why-icon icon-purple">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
                             </div>
                             <h3 class="why-card-title" data-i18n="why_c1_title">검증된 대학교 신뢰성</h3>
                             <p class="why-card-desc" data-i18n="why_c1_desc">.edu 및 국가별 공식 대학 이메일 인증을 통과한 재학생만 가입할 수 있어 안전하고 신뢰할 수 있습니다.</p>
@@ -1528,7 +1529,7 @@
                     <div class="why-card">
                         <div>
                             <div class="why-icon icon-mint">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6M4 14e1 1 0 0 1 0-2M2 5h12M7 2v3M22 22l-5-10-5 10M14 18h6" /></svg>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6M4 14e1 1 0 0 1 0-2M2 5h12M7 2v3M22 22l-5-10-5 10M14 18h6" /></svg>
                             </div>
                             <h3 class="why-card-title" data-i18n="why_c2_title">AI Instant Translation</h3>
                             <p class="why-card-desc" data-i18n="why_c2_desc">64개 언어 실시간 자동 번역으로 언어 장벽 없이 내 언어로 편하게 대화하고 협업하세요.</p>
@@ -1539,7 +1540,7 @@
                     <div class="why-card">
                         <div>
                             <div class="why-icon icon-pink">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
                             </div>
                             <h3 class="why-card-title" data-i18n="why_c3_title">스터디 & 프로젝트 매칭</h3>
                             <p class="why-card-desc" data-i18n="why_c3_desc">전공, 관심사, 현재 진행 중인 프로젝트를 기반으로 딱 맞는 글로벌 파트너를 추천해 드립니다.</p>
@@ -1804,7 +1805,7 @@
                         <div class="local-time-inline" id="activeLocalTime" style="display:none;"></div>
                     </div>
                     <div class="msg-header-actions" id="msgHeaderActions" style="display:none;">
-                        <button type="button" class="msg-more-btn" id="chatMoreBtn" onclick="toggleChatMoreMenu()" aria-label="더보기">⋯</button>
+                        <button type="button" class="msg-more-btn icon-btn-tap" id="chatMoreBtn" onclick="toggleChatMoreMenu()" aria-label="더보기">⋯</button>
                         <div class="msg-more-menu" id="chatMoreMenu" style="display:none;">
                             <button type="button" onclick="handleDeleteConversation()">대화 내역 삭제</button>
                             <button type="button" class="danger" onclick="handleBlockUser()">차단하기</button>
