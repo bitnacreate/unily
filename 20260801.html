@@ -869,6 +869,12 @@
   .chat-reaction-chip.mine { border-color: var(--indigo); background: rgba(122,112,242,0.12); color: var(--indigo-deep); }
   .chat-time { font-size: 11px; color: var(--ink-soft); margin-top: 4px; padding: 0 4px; display: flex; align-items: center; gap: 4px; }
   .outgoing .chat-time { justify-content: flex-end; }
+  /* 게시글/댓글의 "원문 보기" 패턴을 메시지에도 그대로 적용 — 서로 다른 언어로 쓴 메시지는
+     기본으로 번역해서 보여주고, 필요하면 원문을 확인할 수 있게 한다. */
+  .chat-translate-note{ font-size: 11px; color: var(--ink-soft); margin-top: 4px; padding: 0 4px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .outgoing .chat-translate-note{ justify-content: flex-end; }
+  .chat-view-original-btn{ background: none; border: none; color: var(--indigo-deep); font-weight: 700; font-size: 11px; cursor: pointer; padding: 0; }
+  .chat-view-original-btn:hover{ text-decoration: underline; }
   .chat-read-receipt { opacity: .7; }
   .msg-reply-preview {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -1381,6 +1387,10 @@
     font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:10px;
     display:flex; align-items:center; gap:6px;
   }
+  .mypage-private-badge{
+    font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+    padding:2px 8px; border-radius:100px; background:#FDE9EF; color:#E24E76;
+  }
 
   .mypage-tabs{
     display:flex; gap:4px; background:var(--bg-alt); padding:4px; border-radius:100px;
@@ -1418,6 +1428,7 @@
   }
   .settings-lang-row{ align-items:flex-start; }
   .settings-row-label{ font-size:14px; font-weight:600; color:var(--ink); }
+  .settings-row-desc{ font-size:12px; color:var(--ink-soft); margin-top:3px; max-width:320px; line-height:1.5; }
   .settings-toggle{ position:relative; display:inline-block; width:44px; height:24px; flex-shrink:0; }
   .settings-toggle input{ opacity:0; width:0; height:0; }
   .settings-toggle-slider{
@@ -1920,7 +1931,10 @@
             <!-- 내 프로필 카드 미리보기: 탐색 탭에서 다른 유저에게 보이는 것과 동일한 학생 카드로 렌더링됨
                  (buildMyStudentCard / refreshMyPageCardPreview 참고). 내용이 있을 때만 표시. -->
             <div class="mypage-profile-details" id="mypageProfileDetails">
-                <div class="mypage-preview-label">👀 <span data-i18n="mypage_preview_label">다른 사용자에게 내 카드가 이렇게 보입니다</span></div>
+                <div class="mypage-preview-label">
+                    👀 <span data-i18n="mypage_preview_label">다른 사용자에게 내 카드가 이렇게 보입니다</span>
+                    <span class="mypage-private-badge" id="mypagePrivateBadge" style="display:none;"></span>
+                </div>
                 <div id="mypageCardPreview"></div>
             </div>
 
@@ -1996,6 +2010,16 @@
             </div>
 
             <div class="mypage-tab-panel" id="mypage-panel-settings">
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-row-label" data-i18n="settings_profile_visibility">학생 카드 공개</div>
+                        <div class="settings-row-desc" data-i18n="settings_profile_visibility_desc">꺼두면 "전세계 매칭 탐색" 탭과 다른 사람의 검색 결과에 내 카드가 더 이상 보이지 않아요.</div>
+                    </div>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="profileVisibilityToggle" checked onchange="toggleProfileVisibility(this.checked)">
+                        <span class="settings-toggle-slider"></span>
+                    </label>
+                </div>
                 <div class="settings-row">
                     <div class="settings-row-label" data-i18n="settings_notifications">알림 설정</div>
                     <label class="settings-toggle">
@@ -2350,6 +2374,8 @@
                 edit_interests_label: "관심 분야",
                 edit_interests_placeholder: "쉼표로 구분 (예: AI, 여행, 사진)",
                 edit_save_btn: "저장하기",
+                settings_profile_visibility: "학생 카드 공개",
+                settings_profile_visibility_desc: '꺼두면 "전세계 매칭 탐색" 탭과 다른 사람의 검색 결과에 내 카드가 더 이상 보이지 않아요.',
                 settings_notifications: "알림 설정",
                 settings_language: "언어 설정",
                 saved_title: "저장한 학생",
@@ -2467,6 +2493,8 @@
                 edit_interests_label: "Interests",
                 edit_interests_placeholder: "Comma separated (e.g. AI, Travel, Photography)",
                 edit_save_btn: "Save Changes",
+                settings_profile_visibility: "Card Visibility",
+                settings_profile_visibility_desc: "Turn this off and your card stops appearing in Global Match Explore and other people's search results.",
                 settings_notifications: "Notifications",
                 settings_language: "Language",
                 saved_title: "Saved Students",
@@ -2988,7 +3016,9 @@
         function allStudentCards() {
             const myUid = window.__myUid ? window.__myUid() : null;
             const realCards = (window.__REAL_STUDENTS || [])
-                .filter(u => u.uid !== myUid)
+                // 본인 카드는 원래도 제외했고, 마이페이지에서 "비공개"로 설정한 유저도 탐색 탭에서 빠진다.
+                // profileVisible 필드가 아예 없는(이 기능 이전에 온보딩한) 유저는 기본값 공개로 취급한다.
+                .filter(u => u.uid !== myUid && u.profileVisible !== false)
                 .map(realStudentToCard);
             const mockCards = students.map(s => ({ ...s, isAiGenerated: true }));
             return [...realCards, ...mockCards];
@@ -3020,7 +3050,34 @@
         // 끝낸 학생이 생기는 등) 지금 탐색 화면을 보고 있다면 즉시 다시 그린다.
         window.__onRealStudentsChange = function () {
             if (document.getElementById('page-home')?.classList.contains('active')) render();
+            refreshProfileVisibilityToggle();
+            if (typeof refreshMyPageCardPreview === 'function') refreshMyPageCardPreview();
         };
+
+        // 설정 탭의 "학생 카드 공개" 토글 — window.__REAL_STUDENTS 안의 내 문서에서 profileVisible을
+        // 읽어온다. 필드가 아예 없으면(온보딩만 하고 이 기능을 아직 안 건드린 유저) 기본값은 공개(true).
+        function refreshProfileVisibilityToggle() {
+            const toggle = document.getElementById('profileVisibilityToggle');
+            if (!toggle) return;
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const mine = (window.__REAL_STUDENTS || []).find(u => u.uid === myUid);
+            toggle.checked = !mine || mine.profileVisible !== false;
+        }
+
+        async function toggleProfileVisibility(visible) {
+            if (window.__fbUpdateProfileFields) {
+                try {
+                    await window.__fbUpdateProfileFields({ profileVisible: visible });
+                } catch (err) {
+                    console.error('공개 설정 저장 실패:', err);
+                }
+            }
+            if (typeof refreshMyPageCardPreview === 'function') refreshMyPageCardPreview();
+            showToast(await translateText(
+                visible ? '학생 카드가 다시 공개됐어요.' : '학생 카드를 비공개로 전환했어요. 탐색 탭에서 보이지 않아요.',
+                currentLang
+            ));
+        }
 
         // 실제 유저의 프로젝트 박스 전용 렌더링 (mock 전용 projectBoxHTML과 달리 role/설명/모집인원이 없다).
         function realProjectBoxHTML(s, opts) {
@@ -3201,7 +3258,9 @@
             upsertMockChatRecord(studentId, {
                 id: chatId, studentId, otherName: s.name, otherUniShort: s.uniShort, otherBadgeGradient: s.badgeGradient,
                 lastMessage: greeting, updatedAt: now, unreadCount: 0, pinned: false,
-                messages: [{ id: 'm' + now, senderUid: myUid, text: greeting, createdAt: now }],
+                // CONNECT_GREETING_TEMPLATES는 항상 한국어로 쓰여 있으므로(뷰어의 currentLang과 무관),
+                // lang은 실제 작성 언어인 'ko'로 고정한다 — 다른 언어로 보고 있으면 번역 토글이 뜬다.
+                messages: [{ id: 'm' + now, senderUid: myUid, text: greeting, createdAt: now, lang: 'ko' }],
             });
 
             if (isMessagesPageActive()) renderMessagesList();
@@ -3227,7 +3286,7 @@
                 if (!record) return; // 그 사이 대화가 삭제됐으면 중단
                 const reply = pickRandom(CONNECT_REPLY_TEMPLATES)(s);
                 const now = Date.now();
-                record.messages.push({ id: 'm' + now, senderUid: 'mock-bot', text: reply, createdAt: now });
+                record.messages.push({ id: 'm' + now, senderUid: 'mock-bot', text: reply, createdAt: now, lang: 'ko' }); // CONNECT_REPLY_TEMPLATES도 한국어 원문
                 record.lastMessage = reply;
                 record.updatedAt = now;
                 const viewingThisChat = currentChatId === chatId && isMessagesPageActive();
@@ -3254,7 +3313,7 @@
             if (!record) return;
             const myUid = window.__myUid ? window.__myUid() : null;
             const now = Date.now();
-            record.messages.push({ id: 'm' + now, senderUid: myUid, text, createdAt: now, replyTo, reactions: {} });
+            record.messages.push({ id: 'm' + now, senderUid: myUid, text, createdAt: now, replyTo, reactions: {}, lang: currentLang });
             record.lastMessage = text;
             record.updatedAt = now;
             upsertMockChatRecord(studentId, record);
@@ -3582,6 +3641,15 @@
                 || card.country || card.dreamExchangeCountries.length);
             wrapEl.style.display = hasDetails ? 'block' : 'none';
             previewEl.innerHTML = hasDetails ? studentCardHTML(card, { previewMode: true }) : '';
+
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const mine = (window.__REAL_STUDENTS || []).find(u => u.uid === myUid);
+            const isPrivate = mine && mine.profileVisible === false;
+            const badge = document.getElementById('mypagePrivateBadge');
+            if (badge) {
+                badge.style.display = isPrivate ? 'inline-block' : 'none';
+                badge.textContent = isPrivate ? '비공개' : '';
+            }
         }
 
         /* ---------- SAVED STUDENTS (즐겨찾기) ---------- */
@@ -4154,6 +4222,18 @@
                     ? `<span class="chat-read-receipt">${otherReadAt && otherReadAt >= m.createdAt ? '✓✓' : '✓'}</span>`
                     : '';
 
+                // 원본보기/번역보기 — 커뮤니티 게시글/댓글과 동일한 showOriginalSet 패턴을 그대로 쓴다.
+                // lang이 없는(이 기능 이전에 온) 메시지는 번역 대상에서 조용히 제외한다.
+                const sameLang = !m.lang || m.lang === currentLang;
+                const shownOriginal = showOriginalSet.has('message:' + m.id);
+                const cachedText = m.lang ? TranslationService.getCached(m.lang, currentLang, m.text) : undefined;
+                const bubbleText = sameLang || shownOriginal ? m.text : (cachedText !== undefined ? cachedText : m.text);
+                const translateNoteHtml = (!sameLang) ? `
+                <div class="chat-translate-note" id="msg-note-${m.id}">
+                  <span>${shownOriginal ? '' : translatedFromLabel(m.lang)}</span>
+                  <button type="button" class="chat-view-original-btn" onclick="toggleShowOriginalMessage('${m.id}')">${shownOriginal ? viewTranslationText() : viewOriginalText()}</button>
+                </div>` : '';
+
                 html += `
           <div class="chat-bubble-wrap ${isOut ? 'outgoing' : 'incoming'}${grouped ? ' grouped' : ''}">
             ${pickerHtml}
@@ -4161,7 +4241,8 @@
               ${avatarHtml}
               <div style="min-width:0;">
                 ${replyHtml}
-                <div class="chat-bubble">${escapeHTML(m.text)}</div>
+                <div class="chat-bubble" id="msg-text-${m.id}">${escapeHTML(bubbleText)}</div>
+                ${translateNoteHtml}
               </div>
               <div class="chat-bubble-hover-actions">
                 <button type="button" class="chat-bubble-action" onclick="toggleReactionPicker('${m.id}')" aria-label="반응 추가">🙂</button>
@@ -4178,6 +4259,7 @@
             });
 
             chatBody.innerHTML = html;
+            queueMessageTranslations(messages);
 
             if (wasNearBottom) {
                 chatBody.scrollTop = chatBody.scrollHeight;
@@ -4204,7 +4286,7 @@
             }
             if (!window.__sendChatMessage) return;
             try {
-                await window.__sendChatMessage(currentChatId, text, replyTo);
+                await window.__sendChatMessage(currentChatId, text, replyTo, currentLang);
             } catch (err) {
                 console.error('메시지 전송 실패:', err);
             }
@@ -4943,6 +5025,7 @@
         function renderSettingsTab() {
             const toggle = document.getElementById('notifSettingToggle');
             if (toggle) toggle.checked = NotificationService.isEnabled();
+            refreshProfileVisibilityToggle();
 
             const langBtnsEl = document.getElementById('settingsLangBtns');
             if (!langBtnsEl) return;
@@ -5990,6 +6073,28 @@
             const key = 'comment:' + commentId;
             if (showOriginalSet.has(key)) showOriginalSet.delete(key); else showOriginalSet.add(key);
             renderDetailComments();
+        }
+
+        function toggleShowOriginalMessage(messageId) {
+            const key = 'message:' + messageId;
+            if (showOriginalSet.has(key)) showOriginalSet.delete(key); else showOriginalSet.add(key);
+            renderChatArea();
+        }
+        // 채팅방을 열 때(또는 다시 그릴 때)마다, 아직 캐시에 없는 메시지 번역을 한꺼번에 요청해서
+        // 도착하는 대로 말풍선 텍스트를 제자리에서 갈아끼운다(게시글/댓글과 동일한 패턴).
+        function queueMessageTranslations(messages) {
+            messages.forEach(m => {
+                if (!m.lang || m.lang === currentLang) return;
+                if (showOriginalSet.has('message:' + m.id)) return;
+                const cached = TranslationService.getCached(m.lang, currentLang, m.text);
+                if (cached === undefined) {
+                    TranslationService.translate(m.text, m.lang, currentLang).then(translated => {
+                        if (showOriginalSet.has('message:' + m.id)) return;
+                        const el = document.getElementById('msg-text-' + m.id);
+                        if (el) el.textContent = translated;
+                    });
+                }
+            });
         }
 
         function focusReply(commentId, displayName) {
@@ -7185,6 +7290,7 @@
               createdAt: toMillis(data.createdAt),
               replyTo: data.replyTo || null,
               reactions: data.reactions || {},
+              lang: data.lang || null,
             };
           });
           if (typeof window.__onActiveMessagesChange === "function") window.__onActiveMessagesChange();
@@ -7227,12 +7333,13 @@
         return chatId;
       };
 
-      window.__sendChatMessage = async function (chatId, text, replyTo) {
+      window.__sendChatMessage = async function (chatId, text, replyTo, lang) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
         const myUid = auth.currentUser.uid;
 
         const messageData = { senderUid: myUid, text, createdAt: serverTimestamp(), reactions: {} };
         if (replyTo) messageData.replyTo = replyTo;
+        if (lang) messageData.lang = lang;
         await addDoc(collection(db, "chats", chatId, "messages"), messageData);
 
         const chatRef = doc(db, "chats", chatId);
