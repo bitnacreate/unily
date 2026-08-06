@@ -4392,8 +4392,14 @@
         }
 
         // Firebase가 로그인 세션 복원을 마치면(비동기) 호출됨 → 작성 폼 접근 권한을 다시 계산한다.
-        window.__onAuthStateResolved = function () {
+        // needsOnboarding이 true면(방금 로그인했든, 세션이 복원된 기존 접속이든 상관없이)
+        // 온보딩 위저드를 못 끝낸 사용자이므로 위저드를 띄워 마저 완료하게 한다.
+        window.__onAuthStateResolved = function (needsOnboarding) {
             refreshComposerAccess();
+            if (needsOnboarding && AuthService.isLoggedIn()) {
+                const overlay = document.getElementById('onboardingOverlay');
+                if (overlay && !overlay.classList.contains('active')) onboardingOpen();
+            }
         };
 
         // 초기화 함수
@@ -6064,10 +6070,14 @@
       // 글 작성 폼 접근 권한(canWritePosts) 등을 다시 계산하게 한다.
       onAuthStateChanged(auth, async () => {
         // 차단 목록은 새 채팅 시작/목록 필터링에서 동기적으로 참조해야 해서 로그인될 때 미리 캐시해둔다.
+        // 같은 문서 조회 결과로 onboardingComplete도 함께 확인해서, 방금 로그인했든 세션이
+        // 복원된 재방문이든 상관없이 위저드를 못 끝낸 사용자라면 다시 띄울 수 있게 한다.
+        let needsOnboarding = false;
         if (auth.currentUser) {
           try {
             const meSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
             window.__myBlockedUids = (meSnap.exists() && meSnap.data().blockedUids) || [];
+            needsOnboarding = meSnap.exists() && meSnap.data().onboardingComplete !== true;
           } catch (err) {
             window.__myBlockedUids = [];
           }
@@ -6075,7 +6085,7 @@
           window.__myBlockedUids = [];
         }
 
-        if (typeof window.__onAuthStateResolved === "function") window.__onAuthStateResolved();
+        if (typeof window.__onAuthStateResolved === "function") window.__onAuthStateResolved(needsOnboarding);
         // 메시지 화면을 보고 있는 도중에 Firebase 로그인 세션 복원이 뒤늦게 끝난 경우,
         // 대화 목록 구독이 조용히 실패한 채로 남아있지 않도록 다시 시도한다.
         const messagesPageActive = document.getElementById("page-messages")?.classList.contains("active");
