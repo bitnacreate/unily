@@ -405,7 +405,7 @@
     padding:36px 32px; text-align:center; box-shadow:0 30px 60px -20px rgba(30,20,60,.4);
   }
   .profile-modal-close{
-    position:absolute; top:16px; right:16px; width:30px; height:30px; border-radius:50%;
+    position:absolute; top:16px; right:16px; border-radius:50%;
     border:1px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; font-size:14px;
   }
   .profile-modal-avatar{
@@ -2143,7 +2143,7 @@
     <!-- ---------- STUDENT PROFILE MODAL ---------- -->
     <div class="profile-modal-overlay" id="profileModalOverlay" onclick="if(event.target === this) closeStudentProfile()">
         <div class="profile-modal">
-            <button class="profile-modal-close" onclick="closeStudentProfile()">✕</button>
+            <button class="profile-modal-close icon-btn-tap" onclick="closeStudentProfile()">✕</button>
             <div class="profile-modal-avatar" id="modalAvatar">U</div>
             <div class="profile-modal-name" id="modalName">Name</div>
             <div class="profile-modal-uni" id="modalUni">University</div>
