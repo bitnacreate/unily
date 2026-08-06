@@ -449,11 +449,13 @@
     font-size:10.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px;
   }
   .join-modal-detail-value{ font-size:13.5px; font-weight:700; color:var(--ink); }
-  .simple-modal .btn-primary-modal{
+  /* .simple-modal 안에서만 먹던 선택자라 legal-modal(이용약관/개인정보처리방침)의 "확인했습니다" 버튼은
+     이 스타일을 전혀 못 받고 브라우저 기본 버튼으로 보이던 버그였다 — 범위를 넓혀 모든 모달 확인 버튼에 적용. */
+  .btn-primary-modal{
     width:100%; background:var(--ink); color:#fff; border:none; padding:12px; border-radius:100px;
     font-weight:600; font-size:14px; cursor:pointer; transition:background .18s ease, transform .12s ease;
   }
-  .simple-modal .btn-primary-modal:hover{ background:var(--indigo-deep); transform:translateY(-1px); }
+  .btn-primary-modal:hover{ background:var(--indigo-deep); transform:translateY(-1px); }
   @media (max-width:380px){ .join-modal-detail-row{ flex-direction:column; } }
   .card-top{ display:flex; align-items:center; gap:14px; }
   .uni-badge{
@@ -2999,7 +3001,7 @@
             }
 
             if (needsOnboarding) {
-                onboardingOpen();
+                openOnboardingWithTermsGate();
             } else {
                 alert(await translateText('Google 계정으로 로그인되었습니다.', currentLang));
             }
@@ -3924,8 +3926,26 @@
             document.getElementById('legalModalBody').innerHTML = doc.html;
             document.getElementById('legalModalOverlay').classList.add('active');
         }
+        // 로그인 직후 온보딩 위저드를 띄우기 전에 이용약관을 한 번 더 보여줘야 할 때 true로 켜둔다
+        // (openOnboardingWithTermsGate 참고). X 버튼/배경 클릭/확인했습니다 버튼, 어떤 방식으로
+        // 닫든 닫히는 순간 위저드로 이어지도록 closeLegalModal() 한 곳에서 처리한다.
+        let pendingOnboardingAfterTerms = false;
         function closeLegalModal() {
             document.getElementById('legalModalOverlay').classList.remove('active');
+            if (pendingOnboardingAfterTerms) {
+                pendingOnboardingAfterTerms = false;
+                onboardingOpen();
+            }
+        }
+        // 프로필 설정 위저드를 띄우기 전에 이용약관 팝업을 먼저 보여준다. 이미 위저드나 이 게이트가
+        // 열려 있으면 중복 호출을 무시한다(예: 로그인 직후 이벤트와 세션 복원 체크가 겹치는 경우).
+        function openOnboardingWithTermsGate() {
+            const onboardingOverlay = document.getElementById('onboardingOverlay');
+            const legalOverlay = document.getElementById('legalModalOverlay');
+            if (onboardingOverlay && onboardingOverlay.classList.contains('active')) return;
+            if (legalOverlay && legalOverlay.classList.contains('active') && pendingOnboardingAfterTerms) return;
+            pendingOnboardingAfterTerms = true;
+            openLegalModal('terms');
         }
 
         /* ---------- 구글 로그인 전 약관 동의 게이트 ----------
@@ -4568,8 +4588,7 @@
         window.__onAuthStateResolved = function (needsOnboarding) {
             refreshComposerAccess();
             if (needsOnboarding && AuthService.isLoggedIn()) {
-                const overlay = document.getElementById('onboardingOverlay');
-                if (overlay && !overlay.classList.contains('active')) onboardingOpen();
+                openOnboardingWithTermsGate();
             }
         };
 
