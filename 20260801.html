@@ -3179,6 +3179,14 @@
             s => `Hi! 메시지 확인했어요 :) 저도 관심 있는 주제라 반가워요. 더 이야기 나눠봐요!`,
         ];
 
+        // AI 생성 학생의 국가(students 배열의 country, 한국어 표기) → 실제로 그 학생이 답장을 쓸 언어.
+        // 사이트가 지원하는 7개 언어 밖의 국가(브라질 등)는 영어로 대체한다.
+        const COUNTRY_TO_LANG = {
+            '한국': 'ko', '미국': 'en', '영국': 'en', '캐나다': 'en',
+            '프랑스': 'fr', '독일': 'de', '일본': 'ja', '중국': 'zh-CN',
+        };
+        function studentNativeLang(s) { return COUNTRY_TO_LANG[s.country] || 'en'; }
+
         /* ---------- 로컬 mock 대화 저장소 ---------- */
         const MOCK_CHATS_KEY = 'unily_mock_chats'; // { [studentId]: { id, otherName, ..., messages:[...] } }
         function getMockChatsStore() {
@@ -3284,13 +3292,21 @@
                 if (currentChatId === chatId) showMockTypingIndicator();
             }, 300);
 
+            // 내가 쓴 인사말은 한국어 그대로 두고, 답장은 그 학생의 국가 언어로 실제 번역해서 보낸다
+            // (한국 학생이면 그대로 한국어) — 이렇게 해야 원본보기/번역보기 토글이 언어 전환 없이도
+            // 바로 쓸모 있게 나타난다. 타이핑 애니메이션이 떠 있는 동안 번역을 미리 시작해서,
+            // 실제 네트워크 지연이 "1~2초 타이핑 후 도착"하는 자연스러운 흐름을 해치지 않게 한다.
+            const nativeLang = studentNativeLang(s);
+            const replyKo = pickRandom(CONNECT_REPLY_TEMPLATES)(s);
+            const replyPromise = nativeLang === 'ko' ? Promise.resolve(replyKo) : TranslationService.translate(replyKo, 'ko', nativeLang);
+
             const typingDelay = 1000 + Math.random() * 1000; // 1~2초
-            setTimeout(() => {
+            setTimeout(async () => {
                 const record = getMockChatRecord(studentId);
                 if (!record) return; // 그 사이 대화가 삭제됐으면 중단
-                const reply = pickRandom(CONNECT_REPLY_TEMPLATES)(s);
+                const reply = await replyPromise;
                 const now = Date.now();
-                record.messages.push({ id: 'm' + now, senderUid: 'mock-bot', text: reply, createdAt: now, lang: 'ko' }); // CONNECT_REPLY_TEMPLATES도 한국어 원문
+                record.messages.push({ id: 'm' + now, senderUid: 'mock-bot', text: reply, createdAt: now, lang: nativeLang });
                 record.lastMessage = reply;
                 record.updatedAt = now;
                 const viewingThisChat = currentChatId === chatId && isMessagesPageActive();
