@@ -542,28 +542,6 @@
   }
   .join-modal-detail-value{ font-size:13.5px; font-weight:700; color:var(--ink); }
 
-  /* ---------- CONNECT 모달 (AI 카드 시뮬레이션 DM) ----------
-     .simple-modal은 text-align:center에 max-width:360px로 짧은 안내문 전용이라, 좌우 정렬이
-     갈리는 채팅 말풍선 스레드를 담기엔 안 맞는다. 별도 박스를 두되, 말풍선(.chat-bubble)과
-     타이핑 애니메이션(.typing-bubble)은 실제 메시지함에서 쓰는 걸 그대로 재사용한다. */
-  .connect-modal{
-    position:relative; background:#fff; width:100%; max-width:400px; max-height:80vh;
-    border-radius:var(--radius-lg); box-shadow:0 30px 60px -20px rgba(30,20,60,.4);
-    display:flex; flex-direction:column; overflow:hidden; text-align:left;
-    animation:modalPopIn .28s cubic-bezier(.16,1,.3,1);
-  }
-  .connect-modal-header{
-    display:flex; align-items:center; gap:12px; padding:20px 44px 16px 20px;
-    border-bottom:1px solid var(--line); flex-shrink:0;
-  }
-  .connect-modal-avatar{ width:44px; height:44px; font-size:14px; border-radius:50%; flex-shrink:0; }
-  .connect-modal-name{ font-weight:700; font-size:15px; }
-  .connect-modal-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
-  .connect-modal-thread{
-    padding:18px 20px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;
-    flex:1; min-height:180px;
-  }
-  .connect-modal-thread .chat-bubble-wrap{ max-width:88%; }
   /* .simple-modal 안에서만 먹던 선택자라 legal-modal(이용약관/개인정보처리방침)의 "확인했습니다" 버튼은
      이 스타일을 전혀 못 받고 브라우저 기본 버튼으로 보이던 버그였다 — 범위를 넓혀 모든 모달 확인 버튼에 적용. */
   .btn-primary-modal{
@@ -2245,24 +2223,6 @@
         </div>
     </div>
 
-    <!-- ---------- CONNECT 모달 (AI 생성 카드 전용 시뮬레이션 DM 미리보기) ----------
-         students 배열 출신 가상 카드는 실제 Firestore 유저가 아니라서 진짜 채팅방을 열 수 없다.
-         Connect를 누르면 랜덤 인사+협업 제안 메시지를 보내고, 1~2초 뒤 타이핑 애니메이션과 함께
-         자동 답장이 오는 짧은 시뮬레이션 대화를 이 모달 안에서 보여준다. -->
-    <div class="simple-modal-overlay" id="connectModalOverlay" onclick="if(event.target === this) closeConnectModal()">
-        <div class="connect-modal">
-            <button type="button" class="legal-modal-close icon-btn-tap" style="position:absolute; top:10px; right:10px; z-index:2;" onclick="closeConnectModal()" aria-label="닫기">✕</button>
-            <div class="connect-modal-header">
-                <div class="uni-badge connect-modal-avatar" id="connectModalAvatar"></div>
-                <div>
-                    <div class="connect-modal-name" id="connectModalName"></div>
-                    <div class="connect-modal-sub">AI 생성 프로필과의 대화 미리보기</div>
-                </div>
-            </div>
-            <div class="connect-modal-thread" id="connectModalThread"></div>
-        </div>
-    </div>
-
     <footer>
         <div class="wrap footer-inner">
             <a onclick="showPage('home')" class="brand"><span class="brand-mark"></span>Unily</a>
@@ -3134,12 +3094,16 @@
 
         /* ==================================================================
            CONNECT 시뮬레이션 — students 배열(AI 생성 가상 카드) 전용.
-           실제 Firestore 유저가 아니라서 진짜 채팅방을 만들 수 없으므로, Connect를 누르면
-           랜덤 인사+협업 제안 메시지를 보내고 1~2초 뒤 타이핑 애니메이션과 함께 자동 답장이
-           오는 짧은 대화를 모달 안에서 보여준다. 같은 카드를 다시 열면 이전에 만들어진
-           대화를 그대로 재사용해서(localStorage), 매번 다른 인사말이 새로 생기지 않게 한다.
+           실제 Firestore 유저가 아니라서 진짜 채팅방을 만들 순 없지만, "mock-{studentId}"를
+           chatId로 쓰는 로컬(localStorage) 대화를 만들어서 실제 메시지함 목록(renderMessagesList)과
+           채팅방(renderChatArea/selectChat/sendChatMessage)에 그대로 얹는다 — 진짜 대화와 같은
+           화면·같은 함수를 타되, Firestore 대신 getAllChatsCombined()/getMockMessages()가
+           그 자리를 채워 넣는 방식. Connect를 누르면 랜덤 인사+협업 제안 메시지를 보내고,
+           토스트로 "요청을 보냈다"고 즉시 알린 뒤, 1~2초 후 타이핑 애니메이션과 함께 자동 답장이
+           메시지함에 도착한다(지금 그 대화를 보고 있지 않으면 안 읽음 배지가 올라간다).
            ================================================================== */
         function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+        function isMockChatId(id) { return typeof id === 'string' && id.indexOf('mock-') === 0; }
 
         const CONNECT_GREETING_TEMPLATES = [
             s => `안녕하세요 ${s.name}님! 프로필 보고 연락드려요 :) 관심사가 잘 맞는 것 같아서, 편하실 때 이야기 나눠볼 수 있을까요?`,
@@ -3158,63 +3122,160 @@
             s => `Hi! 메시지 확인했어요 :) 저도 관심 있는 주제라 반가워요. 더 이야기 나눠봐요!`,
         ];
 
-        const CONNECT_THREAD_KEY = 'unily_connect_threads'; // { [studentId]: { greeting, reply } }
-        function getConnectThreads() {
-            try { return JSON.parse(localStorage.getItem(CONNECT_THREAD_KEY) || '{}'); }
+        /* ---------- 로컬 mock 대화 저장소 ---------- */
+        const MOCK_CHATS_KEY = 'unily_mock_chats'; // { [studentId]: { id, otherName, ..., messages:[...] } }
+        function getMockChatsStore() {
+            try { return JSON.parse(localStorage.getItem(MOCK_CHATS_KEY) || '{}'); }
             catch (err) { return {}; }
         }
-        function saveConnectThread(studentId, thread) {
-            const all = getConnectThreads();
-            all[studentId] = thread;
-            localStorage.setItem(CONNECT_THREAD_KEY, JSON.stringify(all));
+        function saveMockChatsStore(store) { localStorage.setItem(MOCK_CHATS_KEY, JSON.stringify(store)); }
+        function getMockChatRecord(studentId) { return getMockChatsStore()[studentId] || null; }
+        function upsertMockChatRecord(studentId, record) {
+            const store = getMockChatsStore();
+            store[studentId] = record;
+            saveMockChatsStore(store);
+        }
+        function deleteMockChatRecord(studentId) {
+            const store = getMockChatsStore();
+            delete store[studentId];
+            saveMockChatsStore(store);
+        }
+        function getMockMessages(chatId) {
+            const record = getMockChatRecord(chatId.replace('mock-', ''));
+            return record ? record.messages : [];
+        }
+        // renderMessagesList/selectChat/renderChatArea가 기대하는 "chat summary" 모양으로 변환.
+        function mockChatToListItem(record) {
+            const lastMsg = record.messages[record.messages.length - 1];
+            return {
+                id: record.id, otherUid: null, otherName: record.otherName,
+                otherUniShort: record.otherUniShort, otherBadgeGradient: record.otherBadgeGradient,
+                lastMessage: record.lastMessage, lastMessageSenderUid: lastMsg ? lastMsg.senderUid : null,
+                updatedAt: record.updatedAt, unreadCount: record.unreadCount || 0,
+                pinned: !!record.pinned, otherLastReadAt: 0, isMock: true,
+            };
+        }
+        // 실제 Firestore 대화(window.__CHATS) + 로컬 mock 대화를 최신순으로 합친 통합 목록.
+        // 메시지함 화면의 모든 렌더링/선택 함수가 window.__CHATS를 직접 읽는 대신 이걸 쓰도록 바꿨다.
+        function getAllChatsCombined() {
+            const store = getMockChatsStore();
+            const mockList = Object.keys(store).map(id => mockChatToListItem(store[id]));
+            return [...mockList, ...(window.__CHATS || [])].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        }
+        function renderMsgNavBadge() {
+            const badge = document.getElementById('msgNavBadge');
+            if (!badge) return;
+            // 실제 대화의 안 읽음 수는 메시지함 밖에서는 구독하지 않아 알 수 없지만, mock 대화는
+            // localStorage라 페이지와 무관하게 항상 정확히 셀 수 있다.
+            const store = getMockChatsStore();
+            const mockUnread = Object.values(store).reduce((sum, r) => sum + (r.unreadCount || 0), 0);
+            if (mockUnread > 0) {
+                badge.textContent = mockUnread > 9 ? '9+' : String(mockUnread);
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        function markMockChatRead(studentId) {
+            const record = getMockChatRecord(studentId);
+            if (!record || !record.unreadCount) return;
+            record.unreadCount = 0;
+            upsertMockChatRecord(studentId, record);
+            renderMsgNavBadge();
         }
 
-        function connectBubbleHTML(text, outgoing) {
-            return `<div class="chat-bubble-wrap ${outgoing ? 'outgoing' : 'incoming'}"><div class="chat-bubble">${escapeHTML(text)}</div></div>`;
-        }
-
-        function connectStudent(studentId) {
+        async function connectStudent(studentId) {
             const s = students.find(x => x.id === studentId);
             if (!s) return;
 
-            document.getElementById('connectModalAvatar').textContent = s.uniShort;
-            document.getElementById('connectModalAvatar').style.background = s.badgeGradient;
-            document.getElementById('connectModalName').textContent = s.name;
-            document.getElementById('connectModalOverlay').classList.add('active');
-
-            const thread = document.getElementById('connectModalThread');
-            const threads = getConnectThreads();
-            const existing = threads[studentId];
-
-            if (existing) {
-                // 이미 연결한 적 있는 카드 — 새로 만들지 않고 그때 오간 대화를 그대로 보여준다.
-                thread.innerHTML = connectBubbleHTML(existing.greeting, true) + connectBubbleHTML(existing.reply, false);
+            const chatId = 'mock-' + studentId;
+            if (getMockChatRecord(studentId)) {
+                // 이미 연결한 적 있는 카드 — 새 요청을 또 만들지 않고 기존 대화로 안내한다.
+                showToast(await translateText(`${s.name}님과는 이미 대화 중이에요. 메시지함에서 이어가보세요.`, currentLang));
                 return;
             }
 
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const now = Date.now();
             const greeting = pickRandom(CONNECT_GREETING_TEMPLATES)(s);
-            thread.innerHTML = connectBubbleHTML(greeting, true);
+            upsertMockChatRecord(studentId, {
+                id: chatId, studentId, otherName: s.name, otherUniShort: s.uniShort, otherBadgeGradient: s.badgeGradient,
+                lastMessage: greeting, updatedAt: now, unreadCount: 0, pinned: false,
+                messages: [{ id: 'm' + now, senderUid: myUid, text: greeting, createdAt: now }],
+            });
 
-            // 타이핑 애니메이션(1~2초) 후 자동 답장 — 실제 메시지함의 .typing-bubble을 그대로 재사용.
+            if (isMessagesPageActive()) renderMessagesList();
+            renderMsgNavBadge();
+            showToast(await translateText(`${s.name}님에게 커넥트 요청 메시지를 보냈습니다.`, currentLang));
+
+            scheduleMockReply(studentId);
+        }
+
+        // Connect 직후, 그리고 mock 대화방에서 내가 메시지를 더 보낼 때마다 재사용되는 "타이핑 → 답장" 시뮬레이션.
+        function scheduleMockReply(studentId) {
+            const s = students.find(x => x.id === studentId);
+            if (!s) return;
+            const chatId = 'mock-' + studentId;
+
             setTimeout(() => {
-                thread.insertAdjacentHTML('beforeend',
-                    `<div class="chat-bubble-wrap incoming" id="connectTypingIndicator"><div class="chat-bubble typing-bubble"><span></span><span></span><span></span></div></div>`);
-                thread.scrollTop = thread.scrollHeight;
-            }, 250);
+                if (currentChatId === chatId) showMockTypingIndicator();
+            }, 300);
 
             const typingDelay = 1000 + Math.random() * 1000; // 1~2초
             setTimeout(() => {
-                const typingEl = document.getElementById('connectTypingIndicator');
-                if (typingEl) typingEl.remove();
+                const record = getMockChatRecord(studentId);
+                if (!record) return; // 그 사이 대화가 삭제됐으면 중단
                 const reply = pickRandom(CONNECT_REPLY_TEMPLATES)(s);
-                thread.insertAdjacentHTML('beforeend', connectBubbleHTML(reply, false));
-                thread.scrollTop = thread.scrollHeight;
-                saveConnectThread(studentId, { greeting, reply });
-            }, 250 + typingDelay);
+                const now = Date.now();
+                record.messages.push({ id: 'm' + now, senderUid: 'mock-bot', text: reply, createdAt: now });
+                record.lastMessage = reply;
+                record.updatedAt = now;
+                const viewingThisChat = currentChatId === chatId && isMessagesPageActive();
+                if (!viewingThisChat) record.unreadCount = (record.unreadCount || 0) + 1;
+                upsertMockChatRecord(studentId, record);
+
+                if (isMessagesPageActive()) renderMessagesList();
+                if (viewingThisChat) renderChatArea({ forceScrollBottom: true });
+                renderMsgNavBadge();
+            }, 300 + typingDelay);
         }
 
-        function closeConnectModal() {
-            document.getElementById('connectModalOverlay').classList.remove('active');
+        function showMockTypingIndicator() {
+            const chatBody = document.getElementById('chatBody');
+            if (!chatBody || document.getElementById('mockTypingIndicator')) return;
+            chatBody.insertAdjacentHTML('beforeend',
+                `<div class="chat-bubble-wrap incoming" id="mockTypingIndicator"><div class="chat-group-row"><div class="chat-group-avatar show"></div><div class="chat-bubble typing-bubble"><span></span><span></span><span></span></div></div></div>`);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        function sendMockChatMessage(chatId, text, replyTo) {
+            const studentId = chatId.replace('mock-', '');
+            const record = getMockChatRecord(studentId);
+            if (!record) return;
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const now = Date.now();
+            record.messages.push({ id: 'm' + now, senderUid: myUid, text, createdAt: now, replyTo, reactions: {} });
+            record.lastMessage = text;
+            record.updatedAt = now;
+            upsertMockChatRecord(studentId, record);
+            renderMessagesList();
+            renderChatArea({ forceScrollBottom: true });
+            scheduleMockReply(studentId);
+        }
+
+        function toggleMockReaction(chatId, messageId, emoji) {
+            const studentId = chatId.replace('mock-', '');
+            const record = getMockChatRecord(studentId);
+            const msg = record && record.messages.find(m => m.id === messageId);
+            if (msg) {
+                const myUid = window.__myUid ? window.__myUid() : null;
+                msg.reactions = msg.reactions || {};
+                msg.reactions[emoji] = msg.reactions[emoji] || [];
+                const idx = msg.reactions[emoji].indexOf(myUid);
+                if (idx >= 0) msg.reactions[emoji].splice(idx, 1); else msg.reactions[emoji].push(myUid);
+                upsertMockChatRecord(studentId, record);
+            }
+            renderChatArea();
         }
 
         /* ---------- DREAM EXCHANGE COUNTRIES ---------- */
@@ -3821,13 +3882,22 @@
         }
 
         function togglePinChat(chatId, currentlyPinned) {
+            if (isMockChatId(chatId)) {
+                const studentId = chatId.replace('mock-', '');
+                const record = getMockChatRecord(studentId);
+                if (!record) return;
+                record.pinned = !currentlyPinned;
+                upsertMockChatRecord(studentId, record);
+                renderMessagesList();
+                return;
+            }
             if (window.__togglePinChat) window.__togglePinChat(chatId, !currentlyPinned).catch(err => console.error('고정 실패:', err));
         }
 
         function renderMessagesList() {
             const listEl = document.getElementById('msgList');
             if (!listEl) return;
-            const allChats = window.__CHATS || [];
+            const allChats = getAllChatsCombined();
             const myUid = window.__myUid ? window.__myUid() : null;
 
             const unreadThreadCount = allChats.filter(c => c.unreadCount > 0).length;
@@ -3874,15 +3944,10 @@
             }).join('');
         }
 
-        // "메시지" 네비게이션 링크의 빨간 뱃지는 메시지 화면 밖에서는 대화 목록을 구독하지 않아 알 수 없으므로 비활성화.
-        function renderMsgNavBadge() {
-            const badge = document.getElementById('msgNavBadge');
-            if (badge) badge.style.display = 'none';
-        }
 
         function selectChat(chatId) {
             currentChatId = chatId;
-            const item = (window.__CHATS || []).find(c => c.id === chatId);
+            const item = getAllChatsCombined().find(c => c.id === chatId);
             cancelReply();
             openReactionPickerId = null;
             const moreMenu = document.getElementById('chatMoreMenu');
@@ -3896,14 +3961,18 @@
             }
 
             document.getElementById('activeAvatar').innerText = initialsOf(item ? item.otherName : '');
-            document.getElementById('activeAvatar').style.background = '';
+            document.getElementById('activeAvatar').style.background = (item && item.otherBadgeGradient) || '';
             document.getElementById('activeName').innerText = item ? item.otherName : '';
             document.getElementById('activeUni').innerText = '';
             document.getElementById('activeLocalTime').style.display = 'none';
             document.getElementById('msgHeaderActions').style.display = item ? 'block' : 'none';
 
             renderMessagesList();
-            if (window.__subscribeChatMessages) window.__subscribeChatMessages(chatId);
+            if (isMockChatId(chatId)) {
+                markMockChatRead(chatId.replace('mock-', ''));
+            } else if (window.__subscribeChatMessages) {
+                window.__subscribeChatMessages(chatId);
+            }
             renderChatArea({ forceScrollBottom: true });
         }
 
@@ -3930,9 +3999,15 @@
             toggleChatMoreMenu();
             const msg = await translateText('이 대화 내역을 삭제하시겠어요? 상대방 화면에는 그대로 남아있습니다.', currentLang);
             if (!confirm(msg)) return;
-            if (window.__deleteConversation) await window.__deleteConversation(currentChatId).catch(err => console.error('대화 삭제 실패:', err));
+            if (isMockChatId(currentChatId)) {
+                deleteMockChatRecord(currentChatId.replace('mock-', ''));
+            } else if (window.__deleteConversation) {
+                await window.__deleteConversation(currentChatId).catch(err => console.error('대화 삭제 실패:', err));
+            }
             if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
             currentChatId = null;
+            renderMessagesList();
+            renderMsgNavBadge();
             renderChatArea();
             closeMobileChat();
         }
@@ -3940,8 +4015,21 @@
         async function handleBlockUser() {
             if (!currentChatId) return;
             toggleChatMoreMenu();
-            const item = (window.__CHATS || []).find(c => c.id === currentChatId);
+            const item = getAllChatsCombined().find(c => c.id === currentChatId);
             const name = item ? item.otherName : '이 사용자';
+            if (isMockChatId(currentChatId)) {
+                // AI 생성 프로필은 실제로 차단할 대상이 없으므로, 대화를 정리하는 것으로 대체한다.
+                const mockMsg = await translateText(name + '님과의 대화를 삭제하시겠어요? (AI 생성 프로필이라 별도로 차단할 수는 없어요.)', currentLang);
+                if (!confirm(mockMsg)) return;
+                deleteMockChatRecord(currentChatId.replace('mock-', ''));
+                if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
+                currentChatId = null;
+                renderMessagesList();
+                renderMsgNavBadge();
+                renderChatArea();
+                closeMobileChat();
+                return;
+            }
             const msg = await translateText(name + '님을 차단하시겠어요? 서로의 메시지가 더 이상 보이지 않게 됩니다.', currentLang);
             if (!confirm(msg)) return;
             if (item && window.__blockUser) await window.__blockUser(item.otherUid).catch(err => console.error('차단 실패:', err));
@@ -3955,11 +4043,12 @@
         let replyingToMessage = null;
 
         function startReplyTo(messageId) {
-            const msg = (window.__ACTIVE_MESSAGES || []).find(m => m.id === messageId);
+            const messages = isMockChatId(currentChatId) ? getMockMessages(currentChatId) : (window.__ACTIVE_MESSAGES || []);
+            const msg = messages.find(m => m.id === messageId);
             if (!msg) return;
             replyingToMessage = { id: msg.id, text: msg.text, senderUid: msg.senderUid };
             const myUid = window.__myUid ? window.__myUid() : null;
-            const chatInfo = (window.__CHATS || []).find(c => c.id === currentChatId);
+            const chatInfo = getAllChatsCombined().find(c => c.id === currentChatId);
             const who = msg.senderUid === myUid ? '나' : (chatInfo ? chatInfo.otherName : '상대');
             document.getElementById('msgReplyPreviewText').textContent = who + ': ' + msg.text;
             document.getElementById('msgReplyPreview').style.display = 'flex';
@@ -3982,6 +4071,10 @@
 
         function toggleReaction(messageId, emoji) {
             openReactionPickerId = null;
+            if (isMockChatId(currentChatId)) {
+                toggleMockReaction(currentChatId, messageId, emoji);
+                return;
+            }
             renderChatArea();
             if (!currentChatId || !window.__toggleReaction) return;
             window.__toggleReaction(currentChatId, messageId, emoji).catch(err => console.error('리액션 실패:', err));
@@ -4000,9 +4093,9 @@
                 return;
             }
             document.getElementById('chatHeader').style.display = 'flex';
-            const messages = window.__ACTIVE_MESSAGES || [];
+            const messages = isMockChatId(currentChatId) ? getMockMessages(currentChatId) : (window.__ACTIVE_MESSAGES || []);
             const myUid = window.__myUid ? window.__myUid() : null;
-            const chatInfo = (window.__CHATS || []).find(c => c.id === currentChatId);
+            const chatInfo = getAllChatsCombined().find(c => c.id === currentChatId);
 
             const prevScrollTop = chatBody.scrollTop;
             const prevScrollHeight = chatBody.scrollHeight;
@@ -4096,7 +4189,7 @@
         async function sendChatMessage() {
             const input = document.getElementById('msgInput');
             const text = input.value.trim();
-            if (!text || !currentChatId || !window.__sendChatMessage) return;
+            if (!text || !currentChatId) return;
 
             const replyTo = replyingToMessage
                 ? { messageId: replyingToMessage.id, text: replyingToMessage.text, senderUid: replyingToMessage.senderUid }
@@ -4104,6 +4197,12 @@
 
             input.value = '';
             cancelReply();
+
+            if (isMockChatId(currentChatId)) {
+                sendMockChatMessage(currentChatId, text, replyTo);
+                return;
+            }
+            if (!window.__sendChatMessage) return;
             try {
                 await window.__sendChatMessage(currentChatId, text, replyTo);
             } catch (err) {
