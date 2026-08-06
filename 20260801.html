@@ -463,11 +463,14 @@
   }
   .card-name-row{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
   .card-name{ font-size:16.5px; font-weight:700; }
-  /* students 배열 출신 가상 카드에만 붙는 "AI 생성" 식별 배지. 실제 유저 카드에는 절대 렌더링되지 않음. */
+  /* students 배열 출신 가상 카드에만 붙는 "AI 생성" 식별 배지. 실제 유저 카드에는 절대 렌더링되지 않음.
+     이모지 없이 절제된 톤(회색 배경 + 인디고 텍스트)의 캡슐형 시스템 배지로, 국내외 플랫폼에서
+     "Verified"/"Beta"류 태그에 흔히 쓰이는 스타일을 참고했다. */
   .ai-badge{
-    font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:100px;
-    background:var(--amber-bg,#FBF0D9); color:var(--amber-ink,#9A6B00);
-    border:1px dashed #E0C27A; cursor:help; white-space:nowrap;
+    font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    padding:3px 8px; border-radius:5px; line-height:1.5;
+    background:var(--bg-alt); color:var(--indigo-deep);
+    border:1px solid var(--line); cursor:help; white-space:nowrap;
   }
   .card-major{ font-size:13.5px; color:var(--ink-soft); }
   .card-uni{ font-size:12.5px; color:var(--ink-soft); opacity:.8; }
@@ -2887,7 +2890,7 @@
             // 실제 유저(isAiGenerated: false/undefined)에는 절대 렌더링되지 않고, students 배열 출신
             // 가상 카드(isAiGenerated: true)에만 상단에 "AI 프로필" 배지 + 안내 툴팁이 붙는다.
             const aiBadgeHTML = s.isAiGenerated
-                ? `<span class="ai-badge" title="${escapeHTML(aiBadgeText('tooltip'))}">🤖 ${aiBadgeText('label')}</span>`
+                ? `<span class="ai-badge" title="${escapeHTML(aiBadgeText('tooltip'))}">${aiBadgeText('label')}</span>`
                 : '';
             return `
           <div class="student-card"${cardClickAttr}>
