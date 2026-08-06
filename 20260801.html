@@ -461,8 +461,14 @@
     display:flex; align-items:center; justify-content:center;
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:#fff;
   }
-  .card-name-row{ display:flex; align-items:center; gap:6px; }
+  .card-name-row{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
   .card-name{ font-size:16.5px; font-weight:700; }
+  /* students 배열 출신 가상 카드에만 붙는 "AI 생성" 식별 배지. 실제 유저 카드에는 절대 렌더링되지 않음. */
+  .ai-badge{
+    font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:100px;
+    background:var(--amber-bg,#FBF0D9); color:var(--amber-ink,#9A6B00);
+    border:1px dashed #E0C27A; cursor:help; white-space:nowrap;
+  }
   .card-major{ font-size:13.5px; color:var(--ink-soft); }
   .card-uni{ font-size:12.5px; color:var(--ink-soft); opacity:.8; }
   .card-tags{ display:flex; flex-wrap:wrap; gap:7px; }
@@ -2783,6 +2789,7 @@
                 id: 'real-' + u.uid,
                 uid: u.uid,
                 isReal: true,
+                isAiGenerated: false, // 구글 로그인 + 온보딩 위저드를 실제로 완료한 유저
                 name: escapeHTML(u.name || 'Unily Member'),
                 country: u.country || '',
                 flag: u.country ? flagForCountry(u.country) : '',
@@ -2798,13 +2805,15 @@
         }
         // 탐색 그리드/저장한 학생/프로필 모달이 공유하는 "목업 + 실제 유저" 통합 목록.
         // 실제 유저는 온보딩 완료 순(최신이 먼저)으로 맨 앞에 오고, 로그인한 본인은 제외한다
-        // (내가 나 자신과 매칭되는 걸 볼 필요는 없으므로).
+        // (내가 나 자신과 매칭되는 걸 볼 순 없으므로). students 배열(하드코딩된 가상 학생, Firestore
+        // 문서가 아님)은 병합 시점에 isAiGenerated: true를 붙여 카드에 "AI 프로필" 배지가 뜨게 한다.
         function allStudentCards() {
             const myUid = window.__myUid ? window.__myUid() : null;
             const realCards = (window.__REAL_STUDENTS || [])
                 .filter(u => u.uid !== myUid)
                 .map(realStudentToCard);
-            return [...realCards, ...students];
+            const mockCards = students.map(s => ({ ...s, isAiGenerated: true }));
+            return [...realCards, ...mockCards];
         }
 
         function render() {
@@ -2875,13 +2884,18 @@
                     ? `<button class="btn-connect" onclick="event.stopPropagation(); connectWithRealStudent('${s.uid}')">Connect</button>`
                     : `<button class="btn-connect" onclick="event.stopPropagation(); connectStudent('${s.name}')">Connect</button>`);
             const projectHTML = s.project ? (s.isReal ? realProjectBoxHTML(s, { preview: opts.previewMode }) : projectBoxHTML(s)) : '';
+            // 실제 유저(isAiGenerated: false/undefined)에는 절대 렌더링되지 않고, students 배열 출신
+            // 가상 카드(isAiGenerated: true)에만 상단에 "AI 프로필" 배지 + 안내 툴팁이 붙는다.
+            const aiBadgeHTML = s.isAiGenerated
+                ? `<span class="ai-badge" title="${escapeHTML(aiBadgeText('tooltip'))}">🤖 ${aiBadgeText('label')}</span>`
+                : '';
             return `
           <div class="student-card"${cardClickAttr}>
             ${favBtnHTML}
             <div class="card-top">
               <div class="uni-badge" style="background:${s.badgeGradient}">${s.uniShort}</div>
               <div>
-                <div class="card-name-row"><span class="card-name">${s.name}</span> <span>${s.flag}</span></div>
+                <div class="card-name-row"><span class="card-name">${s.name}</span> <span>${s.flag}</span> ${aiBadgeHTML}</div>
                 <div class="card-major">${t(s.major)}</div>
                 <div class="card-uni">${s.university}</div>
               </div>
@@ -3172,6 +3186,7 @@
                 id: 'me',
                 uid: myUid,
                 isReal: true,
+                isAiGenerated: false,
                 name: escapeHTML(profile.name || 'Unily Member'),
                 country: profile.country || '',
                 flag: profile.country ? flagForCountry(profile.country) : '',
@@ -3301,6 +3316,26 @@
 
         function projectUIText(key) {
             const dict = PROJECT_UI_TEXT[key];
+            if (!dict) return key;
+            return dict[currentLang] || dict.en;
+        }
+
+        // 신생 플랫폼 초기 활성화를 위한 AI 생성 가상 학생 카드(students 배열 출신) 식별 배지 문구.
+        // PROJECT_UI_TEXT와 동일하게 t()를 거치지 않고 7개 언어를 직접 정의해 currentLang에 맞게 보여준다.
+        const AI_BADGE_TEXT = {
+            label: { en: "AI Profile", ko: "AI 프로필", fr: "Profil IA", es: "Perfil de IA", de: "KI-Profil", ja: "AIプロフィール", "zh-CN": "AI 资料" },
+            tooltip: {
+                en: "This is an AI-generated student card used to bootstrap the platform in its early days.",
+                ko: "신생 플랫폼 초기 활성화를 위해 AI로 임의 생성된 학생 카드입니다.",
+                fr: "Il s'agit d'une carte étudiante générée par IA pour lancer la plateforme à ses débuts.",
+                es: "Esta es una tarjeta de estudiante generada por IA utilizada para impulsar la plataforma en sus inicios.",
+                de: "Dies ist eine KI-generierte Studentenkarte, die die Plattform in der Anfangsphase beleben soll.",
+                ja: "プラットフォーム立ち上げ初期の活性化のためにAIが生成した学生カードです。",
+                "zh-CN": "这是为了在平台初期阶段进行推广而由 AI 生成的学生卡片。"
+            }
+        };
+        function aiBadgeText(key) {
+            const dict = AI_BADGE_TEXT[key];
             if (!dict) return key;
             return dict[currentLang] || dict.en;
         }
@@ -6288,6 +6323,7 @@
           project: data.project,
           onboardingComplete: true,
           onboardingCompletedAt: serverTimestamp(),
+          isAiGenerated: false, // 실제 구글 로그인 + 위저드를 완료한 유저이므로 AI 생성 카드가 아님
         });
       };
 
