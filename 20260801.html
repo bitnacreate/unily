@@ -35,7 +35,7 @@
   }
   h1,h2,h3,.brand,.stat-num{ font-family:'Space Grotesk', sans-serif; }
   a{ text-decoration:none; color:inherit; }
-  button, input{ font-family:'Inter', sans-serif; }
+  button, input, textarea, select{ font-family:'Inter', sans-serif; }
   .wrap{ max-width:1160px; margin:0 auto; padding:0 28px; }
 
   /* ---------- AI TRANSLATOR BAR ---------- */
@@ -3045,9 +3045,31 @@
             }
             setMyDreamCountries(mine);
             renderDreamCountryPicker();
-            // 내 희망 국가가 바뀌면 Common Dream Destination 배지도 즉시 갱신
+            // 내 희망 국가가 바뀌면 Common Dream Destination 배지, 마이페이지 상단 프로필 카드
+            // (mypageDreamCountriesDisplay) 둘 다 즉시 갱신되어야 한다.
             render();
             renderSavedStudents();
+            refreshMypageDreamCountriesCard();
+        }
+
+        // 마이페이지 상단 프로필 카드 안의 Dream Exchange Countries 칩만 다시 그린다.
+        // renderMyPageProfile() 전체를 다시 부르면 프로필 수정 폼(populateEditProfileForm)까지 초기화되어
+        // 사용자가 폼에 입력 중이던(아직 저장 안 한) 값이 날아가 버리므로, 이 부분만 targeted하게 갱신한다.
+        function refreshMypageDreamCountriesCard() {
+            if (!AuthService.isLoggedIn()) return;
+            const displayEl = document.getElementById('mypageDreamCountriesDisplay');
+            if (!displayEl) return;
+            const dreamCodes = getMyDreamCountries();
+            displayEl.innerHTML = dreamCodes.map(code => {
+                const c = countryByCode(code);
+                return `<span class="dream-chip">${c ? c.flag : ''} ${countryName(code)}</span>`;
+            }).join('');
+
+            const profile = UserService.getProfile();
+            const homeInfo = HOME_COUNTRY_INFO[profile.country];
+            const hasDetails = !!homeInfo || !!profile.university || !!profile.major || !!profile.bio
+                || profile.interests.length > 0 || dreamCodes.length > 0;
+            document.getElementById('mypageProfileDetails').style.display = hasDetails ? 'block' : 'none';
         }
 
         /* ---------- SAVED STUDENTS (즐겨찾기) ---------- */
