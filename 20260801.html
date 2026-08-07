@@ -239,18 +239,15 @@
   .stat-num{ font-size:clamp(20px,3vw,26px); font-weight:700; letter-spacing:-0.02em; }
   .stat-label{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
   /* "1,200+ 인증 완료 대학" 통계 — 클릭(또는 탭/Enter)하면 인증 대학 목록 모달이 열린다.
-     LinkedIn/Airbnb류 "인증 배지" 패턴: 본문 텍스트 자체가 밑줄 트랜지션 + 체크 배지로 눌러야 할
-     것처럼 보이고, 호버/포커스 시 뜨는 팝오버는 "여기서 모달이 펼쳐진다"는 걸 화살표(하이퍼링크로
-     오인되기 쉬움) 대신 expand 아이콘 + 마이크로카피로 전달한다. */
+     LinkedIn/Airbnb류 "인증 배지" 패턴: 본문 텍스트 자체가 체크 배지로 눌러야 할 것처럼 보이고,
+     호버/포커스 시 뜨는 팝오버는 "여기서 모달이 펼쳐진다"는 걸 화살표(하이퍼링크로 오인되기 쉬움)
+     대신 expand 아이콘 + 마이크로카피로 전달한다. */
   .stat-uni-hover{ position:relative; cursor:pointer; }
   .stat-num-row{ display:flex; align-items:center; gap:5px; }
-  .stat-num-row .stat-num{
-    text-decoration:underline; text-decoration-color:transparent; text-underline-offset:4px;
-    transition:text-decoration-color .18s ease, color .18s ease;
-  }
+  .stat-num-row .stat-num{ transition:color .18s ease; }
   .stat-uni-hover:hover .stat-num-row .stat-num,
   .stat-uni-hover:focus-visible .stat-num-row .stat-num{
-    text-decoration-color:currentColor; color:var(--indigo-deep);
+    color:var(--indigo-deep);
   }
   .stat-verified-badge{ width:15px; height:15px; color:var(--mint); flex-shrink:0; margin-top:1px; }
 
@@ -272,6 +269,26 @@
   @keyframes statPopoverPulse{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.18); opacity:.7; } }
   .stat-uni-hover:hover .stat-hover-popover,
   .stat-uni-hover:focus-visible .stat-hover-popover{
+    opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0) scale(1);
+  }
+
+  /* "7개 지원 언어" 통계 — 대학 통계와 달리 클릭해서 이동하는 링크가 아니라, 호버/포커스 시
+     실제로 어떤 언어로 번역되는지 알려주는 순수 정보성 팝오버라서 밑줄/포인터 커서를 주지 않는다. */
+  .stat-lang-hover{ position:relative; cursor:default; }
+  .stat-lang-popover{
+    display:flex; flex-direction:column; align-items:flex-start; gap:10px;
+    white-space:normal; width:232px; max-width:78vw; text-align:left;
+    border-radius:16px; padding:14px 16px;
+  }
+  .stat-lang-popover-head{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; }
+  .stat-lang-popover-icon{ width:15px; height:15px; flex-shrink:0; color:var(--mint); }
+  .stat-lang-chip-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .stat-lang-chip{
+    font-size:11.5px; font-weight:600; color:#fff; background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 9px; line-height:1.3;
+  }
+  .stat-lang-hover:hover .stat-hover-popover,
+  .stat-lang-hover:focus-visible .stat-hover-popover{
     opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0) scale(1);
   }
 
@@ -1623,7 +1640,25 @@
                                 <span data-i18n="uni_directory_hover_cta">클릭해서 인증 대학 둘러보기</span>
                             </div>
                         </div>
-                        <div class="stat"><div class="stat-num">64</div><div class="stat-label" data-i18n="stat_2">지원 언어</div></div>
+                        <div class="stat stat-lang-hover" id="langHoverTrigger" tabindex="0" role="group" aria-label="지원 언어 7개: 한국어, English, Français, Español, Deutsch, 日本語, 中文">
+                            <div class="stat-num">7</div>
+                            <div class="stat-label" data-i18n="stat_2">지원 언어</div>
+                            <div class="stat-hover-popover stat-lang-popover" role="tooltip">
+                                <div class="stat-lang-popover-head">
+                                    <svg class="stat-lang-popover-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.4 2.4 3.6 5.4 3.6 9s-1.2 6.6-3.6 9c-2.4-2.4-3.6-5.4-3.6-9S9.6 5.4 12 3z" /></svg>
+                                    <span data-i18n="lang_popover_title">실시간 번역 지원 언어</span>
+                                </div>
+                                <div class="stat-lang-chip-list">
+                                    <span class="stat-lang-chip">한국어</span>
+                                    <span class="stat-lang-chip">English</span>
+                                    <span class="stat-lang-chip">Français</span>
+                                    <span class="stat-lang-chip">Español</span>
+                                    <span class="stat-lang-chip">Deutsch</span>
+                                    <span class="stat-lang-chip">日本語</span>
+                                    <span class="stat-lang-chip">中文</span>
+                                </div>
+                            </div>
+                        </div>
                         <div class="stat"><div class="stat-num">88K</div><div class="stat-label" data-i18n="stat_3">활성 학생</div></div>
                     </div>
                 </div>
@@ -2417,6 +2452,7 @@
                 uni_directory_title: "인증된 대학 목록",
                 uni_directory_search_placeholder: "영문 대학명으로 검색...",
                 stat_2: "지원 언어",
+                lang_popover_title: "실시간 번역 지원 언어",
                 stat_3: "활성 학생",
                 why_title: "오직 실제 대학생들과 나누는<br>생산성 있는 대화",
                 why_sub: "학생 이메일 인증부터 Instant 번역, 관심사 기반 매칭까지 — 전 세계 캠퍼스를 하나로 연결하는 세 가지 핵심 기능입니다.",
@@ -2539,6 +2575,7 @@
                 uni_directory_title: "Verified Universities",
                 uni_directory_search_placeholder: "Search by university name...",
                 stat_2: "Languages Supported",
+                lang_popover_title: "Real-time translation supported",
                 stat_3: "Active Students",
                 why_title: "Real conversations, only with<br>real university students",
                 why_sub: "From student email verification to Instant translation and interest-based matching — three core features that bring campuses around the world together.",
