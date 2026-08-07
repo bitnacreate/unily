@@ -5493,6 +5493,13 @@
             if (needsOnboarding && AuthService.isLoggedIn()) {
                 openOnboardingWithTermsGate();
             }
+            // 채팅 말풍선의 "내가 보냄/상대가 보냄" 정렬은 window.__myUid()를 기준으로 계산되는데,
+            // 페이지가 처음 뜬 직후 또는 재로그인 직후엔 Firebase 세션 복원이 비동기라 이 콜백이
+            // 오기 전에 이미 렌더링이 한 번 일어날 수 있다 — 그때는 myUid가 아직 null이라 내가 보낸
+            // 메시지까지 전부 "상대가 보냄"으로 잘못 그려진다. 세션 복원이 끝나 uid를 알게 된 지금
+            // 다시 그려서 바로잡는다.
+            if (typeof renderMessagesList === 'function') renderMessagesList();
+            if (typeof renderChatArea === 'function') renderChatArea();
         };
 
         // 초기화 함수
