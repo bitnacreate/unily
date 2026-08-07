@@ -5063,6 +5063,7 @@
 
         async function handleLogout() {
             AuthService.logout();
+            if (window.__fbSignOut) await window.__fbSignOut();
             // 구글 One Tap/자동 로그인 세션도 함께 해제 (다음 로그인 시 계정 선택 창이 다시 뜨도록)
             if (window.google && google.accounts && google.accounts.id) {
                 google.accounts.id.disableAutoSelect();
@@ -5152,6 +5153,7 @@
         async function finishAccountDeletion() {
             closeDeleteAccountModal();
             AuthService.logout();
+            if (window.__fbSignOut) await window.__fbSignOut();
             if (window.google && google.accounts && google.accounts.id) {
                 google.accounts.id.disableAutoSelect();
             }
@@ -7151,6 +7153,7 @@
         reauthenticateWithCredential,
         deleteUser,
         onAuthStateChanged,
+        signOut,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
       import {
         getFirestore,
@@ -7393,6 +7396,14 @@
           console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
         });
         await deleteUser(auth.currentUser);
+      };
+
+      // classic 스크립트의 AuthService.logout()은 로컬 세션(localStorage)만 지우고 실제 Firebase
+      // Auth 세션은 그대로 유지해왔다 — "로그아웃"을 눌러도 auth.currentUser가 안 바뀌니 UI 상태와
+      // 실제 인증 상태가 어긋나는 원인이 됐다(예: 재로그인 시 onAuthStateChanged가 새 로그인으로
+      // 안 잡히는 등). 로그아웃 버튼이 실제로 Firebase 세션도 함께 끝내도록 명시적으로 호출한다.
+      window.__fbSignOut = function () {
+        return signOut(auth).catch((err) => console.error("Firebase 로그아웃 실패:", err));
       };
 
       // 현재 로그인한 Firebase 유저의 uid (미로그인 시 null). CommunityService의 isMine() 판별에 사용.
