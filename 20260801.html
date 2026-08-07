@@ -181,8 +181,12 @@
     .nav-cta.nav-cta--logout .nav-cta-logout-label{ display:none; }
   }
 
-  /* 햄버거 메뉴 버튼: 데스크톱/태블릿에서는 숨기고 720px 이하에서만 등장 */
-  .nav-hamburger{ display:none; background:none; border:none; cursor:pointer; color:var(--ink); flex-shrink:0; }
+  /* 햄버거 메뉴 버튼: 데스크톱/태블릿에서는 숨기고 720px 이하에서만 등장.
+     버튼에 .icon-btn-tap도 같이 붙어 있는데(터치 영역 44px 확보용) 그 규칙이 이 파일 뒤쪽에서
+     display:inline-flex를 걸어버려 순서상 이 display:none을 이겨버렸다(데스크톱에서도 버튼이 보이던 버그의 원인).
+     .nav-hamburger.icon-btn-tap처럼 클래스 두 개를 같이 건 선택자로 명시도를 올려서 순서와 무관하게 이기게 한다. */
+  .nav-hamburger{ background:none; border:none; cursor:pointer; color:var(--ink); flex-shrink:0; }
+  .nav-hamburger.icon-btn-tap{ display:none; }
   .nav-hamburger svg{ width:22px; height:22px; }
 
   @media (max-width:720px){
@@ -196,7 +200,7 @@
     .nav-links.mobile-open{ display:flex; }
     .nav-links a{ padding:13px clamp(20px,6vw,28px); font-size:15px; }
     .nav-links a.active{ background:var(--bg-alt); }
-    .nav-hamburger{ display:inline-flex; align-items:center; justify-content:center; }
+    .nav-hamburger.icon-btn-tap{ display:inline-flex; align-items:center; justify-content:center; }
     /* "학교 이메일로 시작하기" 텍스트가 좁아진 헤더 폭에 눌려 버튼 안에서 줄바꿈되던 문제 —
        한 줄을 유지할 수 있는 크기로 줄인다(문구 자체는 그대로 둔다) */
     .nav-cta{ font-size:12px; padding:8px 12px; white-space:nowrap; }
