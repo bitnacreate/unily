@@ -275,6 +275,11 @@
   /* "7개 지원 언어" 통계 — 대학 통계와 달리 클릭해서 이동하는 링크가 아니라, 호버/포커스 시
      실제로 어떤 언어로 번역되는지 알려주는 순수 정보성 팝오버라서 밑줄/포인터 커서를 주지 않는다. */
   .stat-lang-hover{ position:relative; cursor:default; }
+  .stat-lang-hover > .stat-num{ transition:color .18s ease; }
+  .stat-lang-hover:hover > .stat-num,
+  .stat-lang-hover:focus-visible > .stat-num{
+    color:var(--indigo-deep);
+  }
   .stat-lang-popover{
     display:flex; flex-direction:column; align-items:flex-start; gap:10px;
     white-space:normal; width:232px; max-width:78vw; text-align:left;
