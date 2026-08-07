@@ -6990,9 +6990,42 @@
          - 탐색 탭 카드는 별도 처리가 필요 없다: window.__REAL_STUDENTS는 onboardingComplete==true 조건의
            실시간 구독이라, 문서가 삭제되는 순간 리스너가 자동으로 갱신되어 카드가 사라진다.
          ================================================================== */
+      // 회원 탈퇴 시 내가 쓴 게시글/댓글을 정리한다. Cloud Functions가 없어(Spark 요금제) 완전한
+      // 연쇄 삭제(예: 내 게시글에 남이 단 댓글, 내가 참여한 채팅 상대편 사본)까지는 클라이언트 권한상
+      // 처리할 수 없지만, 최소한 "내가 직접 쓴 콘텐츠"는 확실히 지운다 — 개인정보처리방침의
+      // 탈퇴 시 정보 삭제 약속을 실질적으로 지키기 위한 최소 조치.
+      async function deleteMyPostsAndComments(uid) {
+        // 1) 내가 쓴 댓글을 어느 게시글에 달았든 전부 삭제한다. 게시글을 지우기 전에 먼저 처리해야
+        //    그 댓글이 달려 있던 게시글의 commentCount를 정확히 줄일 수 있다.
+        const commentsSnap = await getDocs(query(collectionGroup(db, "comments"), where("authorUid", "==", uid)));
+        for (const d of commentsSnap.docs) {
+          const postRef = d.ref.parent.parent;
+          try {
+            await deleteDoc(d.ref);
+            if (postRef) await updateDoc(postRef, { commentCount: increment(-1) }).catch(() => {});
+          } catch (err) {
+            console.error("탈퇴 중 댓글 삭제 실패:", err);
+          }
+        }
+
+        // 2) 내가 쓴 게시글을 전부 삭제한다. 그 안에 남이 단 댓글이 있었다면 규칙상 내게 삭제 권한이
+        //    없어 문서만 고아로 남는다 — Cloud Functions 없이는 완전히 처리할 수 없는 알려진 한계.
+        const postsSnap = await getDocs(query(collection(db, "posts"), where("authorUid", "==", uid)));
+        for (const d of postsSnap.docs) {
+          try {
+            await deleteDoc(d.ref);
+          } catch (err) {
+            console.error("탈퇴 중 게시글 삭제 실패:", err);
+          }
+        }
+      }
+
       window.__fbDeleteAccount = async function () {
         if (!auth.currentUser) throw new Error("로그인이 필요합니다.");
         const uid = auth.currentUser.uid;
+        await deleteMyPostsAndComments(uid).catch((err) => {
+          console.error("탈퇴 중 게시글/댓글 정리 실패:", err);
+        });
         await deleteDoc(doc(db, "users", uid)).catch((err) => {
           console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
         });
@@ -7006,6 +7039,9 @@
         const credential = GoogleAuthProvider.credential(idToken);
         await reauthenticateWithCredential(auth.currentUser, credential);
         const uid = auth.currentUser.uid;
+        await deleteMyPostsAndComments(uid).catch((err) => {
+          console.error("탈퇴 중 게시글/댓글 정리 실패:", err);
+        });
         await deleteDoc(doc(db, "users", uid)).catch((err) => {
           console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
         });
