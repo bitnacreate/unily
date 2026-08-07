@@ -238,6 +238,21 @@
   .hero-stats{ display:flex; gap:34px; flex-wrap:wrap; }
   .stat-num{ font-size:clamp(20px,3vw,26px); font-weight:700; letter-spacing:-0.02em; }
   .stat-label{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  /* "1,200+ 인증 완료 대학" 통계 위에 호버하면 뜨는 안내 팝오버 — 클릭(또는 탭)하면 바로
+     인증 대학 목록 모달이 열린다. 호버가 안 되는 터치 기기에서도 stat 자체를 눌러 열 수 있다. */
+  .stat-uni-hover{ position:relative; cursor:pointer; }
+  .stat-hover-popover{
+    position:absolute; bottom:calc(100% + 10px); left:50%; transform:translateX(-50%) translateY(4px);
+    background:var(--ink); color:#fff; font-size:12.5px; font-weight:600; white-space:nowrap;
+    padding:8px 14px; border-radius:100px; opacity:0; pointer-events:none;
+    transition:opacity .15s ease, transform .15s ease; box-shadow:0 12px 24px -10px rgba(36,31,56,.4);
+  }
+  .stat-hover-popover::after{
+    content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+    border:6px solid transparent; border-top-color:var(--ink);
+  }
+  .stat-uni-hover:hover .stat-hover-popover,
+  .stat-uni-hover:focus-visible .stat-hover-popover{ opacity:1; transform:translateX(-50%) translateY(0); }
 
   /* GLOBE CARD */
   .globe-wrap{ position:relative; display:flex; align-items:center; justify-content:center; }
@@ -980,6 +995,32 @@
   .legal-modal-body p { margin: 0 0 10px; }
   .legal-modal-body ul { margin: 0 0 10px; padding-left: 20px; }
   .legal-modal-footer { padding: 16px 26px; border-top: 1px solid var(--line); flex-shrink: 0; }
+  /* 인증 대학 목록 모달 — .legal-modal 구조(헤더+스크롤 본문)를 그대로 쓰되, 검색/필터 컨트롤 줄과
+     학교 1,200개를 배치 단위로 그리는 목록 영역을 추가한다. */
+  .uni-directory-modal { max-width: 560px; }
+  .uni-directory-count { font-size: 12px; color: var(--ink-soft); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .uni-directory-controls {
+    display: flex; gap: 10px; padding: 16px 26px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+  }
+  .uni-directory-controls .form-control { flex: 1; }
+  .uni-directory-controls .select-wrap { flex-shrink: 0; width: 180px; }
+  .uni-directory-controls select {
+    width: 100%; height: 100%; padding: 12px 30px 12px 14px; border-radius: var(--radius-md);
+    border: 1px solid var(--line); background: var(--bg-alt); font-size: 13px; color: var(--ink);
+    appearance: none; cursor: pointer;
+  }
+  .uni-directory-list { overflow-y: auto; flex: 1; }
+  .uni-directory-item {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 12px 26px; border-bottom: 1px solid var(--line);
+  }
+  .uni-directory-item-name { font-size: 13.5px; color: var(--ink); font-weight: 600; }
+  .uni-directory-item-country { font-size: 11.5px; color: var(--ink-faint, var(--ink-soft)); flex-shrink: 0; white-space: nowrap; }
+  .uni-directory-empty { padding: 40px 26px; text-align: center; font-size: 13px; color: var(--ink-soft); }
+  @media (max-width: 600px) {
+    .uni-directory-controls { flex-direction: column; }
+    .uni-directory-controls .select-wrap { width: 100%; }
+  }
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink-soft); }
   .form-control {
@@ -1550,7 +1591,10 @@
                         </a>
                     </div>
                     <div class="hero-stats">
-                        <div class="stat"><div class="stat-num">1,200+</div><div class="stat-label" data-i18n="stat_1">인증 완료 대학</div></div>
+                        <div class="stat stat-uni-hover" onclick="openUniversityDirectory()" tabindex="0" role="button" aria-label="인증된 대학 목록 보기" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); this.click();}">
+                            <div class="stat-num">1,200+</div><div class="stat-label" data-i18n="stat_1">인증 완료 대학</div>
+                            <div class="stat-hover-popover" data-i18n="uni_directory_hover_cta">인증된 대학 보러가기 →</div>
+                        </div>
                         <div class="stat"><div class="stat-num">64</div><div class="stat-label" data-i18n="stat_2">지원 언어</div></div>
                         <div class="stat"><div class="stat-num">88K</div><div class="stat-label" data-i18n="stat_3">활성 학생</div></div>
                     </div>
@@ -2270,6 +2314,26 @@
         </div>
     </div>
 
+    <!-- ---------- 인증 대학 목록 모달 (top_1200_universities.json) ---------- -->
+    <div class="legal-modal-overlay" id="uniDirectoryOverlay" onclick="if(event.target === this) closeUniversityDirectory()">
+        <div class="legal-modal uni-directory-modal">
+            <div class="legal-modal-header">
+                <div>
+                    <h3 data-i18n="uni_directory_title">인증된 대학 목록</h3>
+                    <p class="uni-directory-count" id="uniDirectoryCount"></p>
+                </div>
+                <button type="button" class="legal-modal-close icon-btn-tap" onclick="closeUniversityDirectory()" aria-label="닫기">✕</button>
+            </div>
+            <div class="uni-directory-controls">
+                <input type="text" id="uniDirectorySearch" class="form-control" data-i18n-placeholder="uni_directory_search_placeholder" placeholder="영문 대학명으로 검색...">
+                <div class="select-wrap">
+                    <select id="uniDirectoryCountryFilter"></select>
+                </div>
+            </div>
+            <div class="uni-directory-list" id="uniDirectoryList"></div>
+        </div>
+    </div>
+
     <footer>
         <div class="wrap footer-inner">
             <a onclick="showPage('home')" class="brand"><span class="brand-mark"></span>Unily</a>
@@ -2321,6 +2385,9 @@
                 hero_sub: "학교 이메일로 안전하게 인증하고 전공, 관심사, 언어가 맞는 글로벌 파트너를 찾으세요. AI 자동 번역으로 언어의 장벽 없이 프로젝트를 함께 진행할 수 있습니다.",
                 hero_btn: "매칭 탐색 시작하기",
                 stat_1: "인증 완료 대학",
+                uni_directory_hover_cta: "인증된 대학 보러가기 →",
+                uni_directory_title: "인증된 대학 목록",
+                uni_directory_search_placeholder: "영문 대학명으로 검색...",
                 stat_2: "지원 언어",
                 stat_3: "활성 학생",
                 why_title: "오직 실제 대학생들과 나누는<br>생산성 있는 대화",
@@ -2440,6 +2507,9 @@
                 hero_sub: "Safely verify with your university email and find global partners who match your major, interests, and language. Work together on projects seamlessly with AI Instant Translation.",
                 hero_btn: "Start Exploring Matches",
                 stat_1: "Verified Universities",
+                uni_directory_hover_cta: "See verified universities →",
+                uni_directory_title: "Verified Universities",
+                uni_directory_search_placeholder: "Search by university name...",
                 stat_2: "Languages Supported",
                 stat_3: "Active Students",
                 why_title: "Real conversations, only with<br>real university students",
@@ -4562,6 +4632,81 @@
         }
 
         /* ==================================================================
+           인증 대학 목록 모달 — 메인페이지 "1,200+ 인증 완료 대학" 통계를 호버/클릭하면 열린다.
+           top_1200_universities.json(위 loadUniversityData 재사용) 전체를 검색+국가 필터+ABC순
+           정렬로 보여준다. 1,200개를 한 번에 그리지 않고 UNI_DIRECTORY_BATCH만큼씩 이어붙이다가,
+           목록 스크롤이 바닥에 가까워지면 다음 배치를 추가로 그리는 무한 스크롤 방식이라
+           많은 수를 한꺼번에 렌더링할 때의 버벅임이 없다.
+           ================================================================== */
+        const UNI_DIRECTORY_BATCH = 80;
+        let uniDirectoryFiltered = [];
+        let uniDirectoryRenderCount = 0;
+
+        function openUniversityDirectory() {
+            document.getElementById('uniDirectoryOverlay').classList.add('active');
+            document.getElementById('uniDirectorySearch').value = '';
+            loadUniversityData().then(list => {
+                populateUniversityCountryFilter(list);
+                renderUniversityDirectoryList();
+            });
+        }
+        function closeUniversityDirectory() {
+            document.getElementById('uniDirectoryOverlay').classList.remove('active');
+        }
+
+        function populateUniversityCountryFilter(list) {
+            const sel = document.getElementById('uniDirectoryCountryFilter');
+            if (sel.dataset.populated) return; // 데이터는 한 번만 로드되므로 국가 목록도 한 번만 채우면 된다
+            sel.dataset.populated = '1';
+            const countries = [...new Set(list.map(u => u.country))].sort((a, b) => a.localeCompare(b));
+            sel.innerHTML = `<option value="">전체 (All Countries)</option>` +
+                countries.map(c => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
+            sel.onchange = renderUniversityDirectoryList;
+        }
+
+        function getFilteredUniversityList(list) {
+            const q = document.getElementById('uniDirectorySearch').value.trim().toLowerCase();
+            const country = document.getElementById('uniDirectoryCountryFilter').value;
+            return list
+                .filter(u => !country || u.country === country)
+                .filter(u => !q || u.name_en.toLowerCase().includes(q))
+                .sort((a, b) => a.name_en.localeCompare(b.name_en));
+        }
+
+        // 검색어/국가 필터가 바뀔 때: 처음부터 다시 그린다(스크롤도 맨 위로).
+        function renderUniversityDirectoryList() {
+            loadUniversityData().then(list => {
+                uniDirectoryFiltered = getFilteredUniversityList(list);
+                uniDirectoryRenderCount = 0;
+                document.getElementById('uniDirectoryCount').textContent =
+                    `${uniDirectoryFiltered.length.toLocaleString()}개 대학`;
+                const listEl = document.getElementById('uniDirectoryList');
+                listEl.scrollTop = 0;
+                listEl.innerHTML = '';
+                appendNextUniversityBatch();
+            });
+        }
+
+        // 스크롤이 바닥에 가까워질 때: 이미 그려둔 항목은 그대로 두고 다음 배치만 뒤에 이어붙인다
+        // (innerHTML을 통째로 다시 쓰면 스크롤 위치가 맨 위로 튕겨서 무한 스크롤이 깨진다).
+        function appendNextUniversityBatch() {
+            const listEl = document.getElementById('uniDirectoryList');
+            const nextItems = uniDirectoryFiltered.slice(uniDirectoryRenderCount, uniDirectoryRenderCount + UNI_DIRECTORY_BATCH);
+            if (uniDirectoryRenderCount === 0 && nextItems.length === 0) {
+                listEl.innerHTML = `<div class="uni-directory-empty">검색 결과가 없어요.</div>`;
+                return;
+            }
+            const html = nextItems.map(u => `
+                <div class="uni-directory-item">
+                  <span class="uni-directory-item-name">${escapeHTML(u.name_en)}</span>
+                  <span class="uni-directory-item-country">${escapeHTML(u.country)}</span>
+                </div>
+            `).join('');
+            listEl.insertAdjacentHTML('beforeend', html);
+            uniDirectoryRenderCount += nextItems.length;
+        }
+
+        /* ==================================================================
            최초 로그인 온보딩 위저드
            - handleCredentialResponse()가 구글 로그인 직후(needsOnboarding===true일 때) onboardingOpen()을 호출.
            - 단계별로 onboardingStepHTML(step)이 #onboardingStepBody를 통째로 다시 그린다(SPA 프레임워크 없이
@@ -5295,6 +5440,13 @@
             document.getElementById('msgSearchInput').addEventListener('input', (e) => {
                 msgSearchQuery = e.target.value.trim();
                 renderMessagesList();
+            });
+
+            document.getElementById('uniDirectorySearch').addEventListener('input', renderUniversityDirectoryList);
+            document.getElementById('uniDirectoryList').addEventListener('scroll', (e) => {
+                const el = e.target;
+                if (uniDirectoryRenderCount >= uniDirectoryFiltered.length) return;
+                if (el.scrollTop + el.clientHeight > el.scrollHeight - 150) appendNextUniversityBatch();
             });
         });
     </script>
