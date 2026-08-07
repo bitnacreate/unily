@@ -238,21 +238,42 @@
   .hero-stats{ display:flex; gap:34px; flex-wrap:wrap; }
   .stat-num{ font-size:clamp(20px,3vw,26px); font-weight:700; letter-spacing:-0.02em; }
   .stat-label{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
-  /* "1,200+ 인증 완료 대학" 통계 위에 호버하면 뜨는 안내 팝오버 — 클릭(또는 탭)하면 바로
-     인증 대학 목록 모달이 열린다. 호버가 안 되는 터치 기기에서도 stat 자체를 눌러 열 수 있다. */
+  /* "1,200+ 인증 완료 대학" 통계 — 클릭(또는 탭/Enter)하면 인증 대학 목록 모달이 열린다.
+     LinkedIn/Airbnb류 "인증 배지" 패턴: 본문 텍스트 자체가 밑줄 트랜지션 + 체크 배지로 눌러야 할
+     것처럼 보이고, 호버/포커스 시 뜨는 팝오버는 "여기서 모달이 펼쳐진다"는 걸 화살표(하이퍼링크로
+     오인되기 쉬움) 대신 expand 아이콘 + 마이크로카피로 전달한다. */
   .stat-uni-hover{ position:relative; cursor:pointer; }
+  .stat-num-row{ display:flex; align-items:center; gap:5px; }
+  .stat-num-row .stat-num{
+    text-decoration:underline; text-decoration-color:transparent; text-underline-offset:4px;
+    transition:text-decoration-color .18s ease, color .18s ease;
+  }
+  .stat-uni-hover:hover .stat-num-row .stat-num,
+  .stat-uni-hover:focus-visible .stat-num-row .stat-num{
+    text-decoration-color:currentColor; color:var(--indigo-deep);
+  }
+  .stat-verified-badge{ width:15px; height:15px; color:var(--mint); flex-shrink:0; margin-top:1px; }
+
   .stat-hover-popover{
-    position:absolute; bottom:calc(100% + 10px); left:50%; transform:translateX(-50%) translateY(4px);
+    position:absolute; bottom:calc(100% + 12px); left:50%; z-index:6; transform-origin:bottom center;
+    transform:translateX(-50%) translateY(6px) scale(.94);
+    display:flex; align-items:center; gap:8px;
     background:var(--ink); color:#fff; font-size:12.5px; font-weight:600; white-space:nowrap;
-    padding:8px 14px; border-radius:100px; opacity:0; pointer-events:none;
-    transition:opacity .15s ease, transform .15s ease; box-shadow:0 12px 24px -10px rgba(36,31,56,.4);
+    padding:9px 16px; border-radius:100px; opacity:0; pointer-events:none;
+    transition:opacity .15s ease, transform .15s ease;
+    box-shadow:0 22px 40px -14px rgba(36,31,56,.5), 0 6px 16px -6px rgba(122,112,242,.4);
   }
   .stat-hover-popover::after{
     content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
     border:6px solid transparent; border-top-color:var(--ink);
   }
+  .stat-popover-icon{ width:15px; height:15px; flex-shrink:0; animation:statPopoverPulse 1.8s ease-in-out infinite; }
+  @media (prefers-reduced-motion:reduce){ .stat-popover-icon{ animation:none; } }
+  @keyframes statPopoverPulse{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.18); opacity:.7; } }
   .stat-uni-hover:hover .stat-hover-popover,
-  .stat-uni-hover:focus-visible .stat-hover-popover{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .stat-uni-hover:focus-visible .stat-hover-popover{
+    opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0) scale(1);
+  }
 
   /* GLOBE CARD */
   .globe-wrap{ position:relative; display:flex; align-items:center; justify-content:center; }
@@ -1591,9 +1612,16 @@
                         </a>
                     </div>
                     <div class="hero-stats">
-                        <div class="stat stat-uni-hover" onclick="openUniversityDirectory()" tabindex="0" role="button" aria-label="인증된 대학 목록 보기" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); this.click();}">
-                            <div class="stat-num">1,200+</div><div class="stat-label" data-i18n="stat_1">인증 완료 대학</div>
-                            <div class="stat-hover-popover" data-i18n="uni_directory_hover_cta">인증된 대학 보러가기 →</div>
+                        <div class="stat stat-uni-hover" id="uniHoverTrigger" onclick="openUniversityDirectory()" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="인증된 대학 목록 보기" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); this.click();}">
+                            <div class="stat-num-row">
+                                <div class="stat-num">1,200+</div>
+                                <svg class="stat-verified-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3.5v5.5c0 5-3.4 8.7-8 11-4.6-2.3-8-6-8-11V5.5L12 2z" /><path d="M9 12l2 2 4-4.5" /></svg>
+                            </div>
+                            <div class="stat-label" data-i18n="stat_1">인증 완료 대학</div>
+                            <div class="stat-hover-popover" role="tooltip">
+                                <svg class="stat-popover-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+                                <span data-i18n="uni_directory_hover_cta">클릭해서 인증 대학 둘러보기</span>
+                            </div>
                         </div>
                         <div class="stat"><div class="stat-num">64</div><div class="stat-label" data-i18n="stat_2">지원 언어</div></div>
                         <div class="stat"><div class="stat-num">88K</div><div class="stat-label" data-i18n="stat_3">활성 학생</div></div>
@@ -2385,7 +2413,7 @@
                 hero_sub: "학교 이메일로 안전하게 인증하고 전공, 관심사, 언어가 맞는 글로벌 파트너를 찾으세요. AI 자동 번역으로 언어의 장벽 없이 프로젝트를 함께 진행할 수 있습니다.",
                 hero_btn: "매칭 탐색 시작하기",
                 stat_1: "인증 완료 대학",
-                uni_directory_hover_cta: "인증된 대학 보러가기 →",
+                uni_directory_hover_cta: "클릭해서 인증 대학 둘러보기",
                 uni_directory_title: "인증된 대학 목록",
                 uni_directory_search_placeholder: "영문 대학명으로 검색...",
                 stat_2: "지원 언어",
@@ -2507,7 +2535,7 @@
                 hero_sub: "Safely verify with your university email and find global partners who match your major, interests, and language. Work together on projects seamlessly with AI Instant Translation.",
                 hero_btn: "Start Exploring Matches",
                 stat_1: "Verified Universities",
-                uni_directory_hover_cta: "See verified universities →",
+                uni_directory_hover_cta: "Click to explore 1,200+ verified universities",
                 uni_directory_title: "Verified Universities",
                 uni_directory_search_placeholder: "Search by university name...",
                 stat_2: "Languages Supported",
@@ -5448,6 +5476,17 @@
                 if (uniDirectoryRenderCount >= uniDirectoryFiltered.length) return;
                 if (el.scrollTop + el.clientHeight > el.scrollHeight - 150) appendNextUniversityBatch();
             });
+
+            // aria-expanded는 CSS만으로는 갱신되지 않으므로(:hover/:focus-visible은 스타일만 바꿀 뿐 속성을
+            // 건드리지 않는다), 팝오버가 실제로 보이는 시점(호버 진입/포커스)에 맞춰 JS로 직접 값을 맞춰준다.
+            const uniHoverTrigger = document.getElementById('uniHoverTrigger');
+            if (uniHoverTrigger) {
+                const setExpanded = (v) => uniHoverTrigger.setAttribute('aria-expanded', v ? 'true' : 'false');
+                uniHoverTrigger.addEventListener('mouseenter', () => setExpanded(true));
+                uniHoverTrigger.addEventListener('mouseleave', () => setExpanded(false));
+                uniHoverTrigger.addEventListener('focus', () => setExpanded(true));
+                uniHoverTrigger.addEventListener('blur', () => setExpanded(false));
+            }
         });
     </script>
 
