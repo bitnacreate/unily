@@ -986,6 +986,25 @@
     width: 100%; padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--line);
     background: var(--bg-alt); outline: none; font-size: 14px; color: var(--ink);
   }
+  /* 대학교 검색 콤보박스 — 온보딩 위저드 3단계 / 마이페이지 프로필 수정에서 공유 */
+  .uni-combobox { position: relative; }
+  .uni-combobox-dropdown {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20;
+    max-height: 260px; overflow-y: auto; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius-md); box-shadow: 0 15px 35px -10px rgba(90,70,220,0.25);
+  }
+  .uni-combobox-dropdown.active { display: block; }
+  .uni-combobox-item {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%;
+    text-align: left; border: none; background: none; padding: 11px 16px; cursor: pointer;
+    border-bottom: 1px solid var(--line);
+  }
+  .uni-combobox-item:last-child { border-bottom: none; }
+  .uni-combobox-item:hover { background: var(--bg-alt); }
+  .uni-combobox-item-name { font-size: 13.5px; color: var(--ink); font-weight: 600; }
+  .uni-combobox-item-country { font-size: 11.5px; color: var(--ink-faint, var(--ink-soft)); flex-shrink: 0; }
+  .uni-combobox-item.uni-combobox-custom .uni-combobox-item-name { color: var(--indigo-deep); font-weight: 600; }
+  .uni-combobox-empty { padding: 14px 16px; font-size: 12.5px; color: var(--ink-soft); }
   .auth-submit-btn {
     width: 100%; background: var(--ink); color: #fff; border: none; border-radius: 100px;
     padding: clamp(12px,2.4vw,14px) 16px; font-size: var(--fs-base); min-height: var(--tap-min);
@@ -3479,6 +3498,7 @@
                     avatar: u.avatar || null,
                     country: u.country || '',
                     university: u.university || '',
+                    universityId: u.universityId || null,
                     major: u.major || '',
                     bio: u.bio || '',
                     interests: u.interests || []
@@ -4436,6 +4456,112 @@
         }
 
         /* ==================================================================
+           대학교 검색 콤보박스 — top_1200_universities.json 기반, 온보딩 위저드 3단계와
+           마이페이지 "프로필 수정"의 학교 입력란이 이 모듈 하나를 공유한다.
+           - 데이터는 앱 전체에서 한 번만 fetch해서 재사용(loadUniversityData).
+           - 입력창의 data-university-id 속성에 "지금 선택된 정확한 학교"를 들고 다니다가,
+             그 값을 사용자가 다시 고치면(선택했던 이름과 달라지면) 속성을 지워서 "목록에 없는
+             학교를 직접 입력한 것"으로 자연스럽게 넘어가게 한다 — 별도의 완료 버튼이 필요 없다.
+           - 검색/선택 로직만 담당하고 실제 저장(폼 상태 반영)은 호출한 쪽(onboardingCaptureCurrentStep,
+             submitEditProfile)이 input.value / input.dataset.universityId를 읽어가는 방식이라,
+             이 모듈은 온보딩·마이페이지 어느 쪽 사정도 알 필요가 없다.
+           ================================================================== */
+        let universityDataPromise = null;
+        function loadUniversityData() {
+            if (!universityDataPromise) {
+                universityDataPromise = fetch('/top_1200_universities.json')
+                    .then(res => res.json())
+                    .catch(err => { console.error('대학 데이터 로드 실패:', err); return []; });
+            }
+            return universityDataPromise;
+        }
+
+        function initUniversityCombobox(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input || input.dataset.comboboxReady) return;
+            input.dataset.comboboxReady = '1';
+            input.setAttribute('autocomplete', 'off');
+
+            const wrap = document.createElement('div');
+            wrap.className = 'uni-combobox';
+            input.parentNode.insertBefore(wrap, input);
+            wrap.appendChild(input);
+            input.classList.add('uni-combobox-input');
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'uni-combobox-dropdown';
+            wrap.appendChild(dropdown);
+
+            function closeDropdown() {
+                dropdown.classList.remove('active');
+                dropdown.innerHTML = '';
+            }
+
+            function renderResults(query) {
+                const q = query.trim().toLowerCase();
+                if (!q) { closeDropdown(); return; }
+                loadUniversityData().then(list => {
+                    const matches = list.filter(u =>
+                        u.name_en.toLowerCase().includes(q) || u.country.toLowerCase().includes(q)
+                    ).slice(0, 30);
+
+                    const itemsHtml = matches.map(u => `
+                        <button type="button" class="uni-combobox-item" data-id="${u.id}" data-name="${escapeHTML(u.name_en)}">
+                          <span class="uni-combobox-item-name">${escapeHTML(u.name_en)}</span>
+                          <span class="uni-combobox-item-country">${escapeHTML(u.country)}</span>
+                        </button>
+                    `).join('');
+                    const emptyHtml = matches.length === 0
+                        ? `<div class="uni-combobox-empty">검색 결과가 없어요.</div>` : '';
+                    const customHtml = `
+                        <button type="button" class="uni-combobox-item uni-combobox-custom" data-custom="1">
+                          <span class="uni-combobox-item-name">✏️ "${escapeHTML(query.trim())}" 직접 입력하기</span>
+                        </button>`;
+                    dropdown.innerHTML = emptyHtml + itemsHtml + customHtml;
+                    dropdown.classList.add('active');
+                });
+            }
+
+            input.addEventListener('input', () => {
+                // 방금 목록에서 선택해서 프로그램적으로 dispatch한 input 이벤트라면(아래 mousedown
+                // 핸들러 참고), 여기서 또 지워버리면 방금 세팅한 universityId가 바로 무효화된다 —
+                // 그 한 번만 건너뛰고, 실제 사용자가 타이핑한 경우에만 이전 선택을 지운다.
+                if (input.dataset.suppressClear) {
+                    delete input.dataset.suppressClear;
+                    return;
+                }
+                delete input.dataset.universityId;
+                renderResults(input.value);
+            });
+            input.addEventListener('focus', () => {
+                if (input.value.trim()) renderResults(input.value);
+            });
+
+            // click이 아니라 mousedown에서 처리 — click까지 기다리면 그 전에 input의 blur가 먼저 발생해
+            // 드롭다운이 이미 닫혀버린다.
+            dropdown.addEventListener('mousedown', (e) => {
+                const item = e.target.closest('.uni-combobox-item');
+                if (!item) return;
+                e.preventDefault();
+                if (!item.dataset.custom) {
+                    input.value = item.dataset.name;
+                    input.dataset.universityId = item.dataset.id;
+                } else {
+                    delete input.dataset.universityId;
+                }
+                closeDropdown();
+                input.dataset.suppressClear = '1';
+                // 외부에서 이 인풋에 걸어둔 oninput 핸들러(예: onboardingValidateStep)가 그대로 실행되도록
+                // 진짜 input 이벤트를 발생시킨다 — 이 콤보박스 모듈은 호출한 쪽 사정을 몰라도 된다.
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!wrap.contains(e.target)) closeDropdown();
+            });
+        }
+
+        /* ==================================================================
            최초 로그인 온보딩 위저드
            - handleCredentialResponse()가 구글 로그인 직후(needsOnboarding===true일 때) onboardingOpen()을 호출.
            - 단계별로 onboardingStepHTML(step)이 #onboardingStepBody를 통째로 다시 그린다(SPA 프레임워크 없이
@@ -4445,11 +4571,11 @@
            ================================================================== */
         const ONBOARDING_TOTAL_STEPS = 8;
         let onboardingStep = 1;
-        let onboardingData = { name: '', studentEmail: '', university: '', major: '', bio: '', interests: [], project: null };
+        let onboardingData = { name: '', studentEmail: '', university: '', universityId: null, major: '', bio: '', interests: [], project: null };
 
         function onboardingOpen() {
             onboardingStep = 1;
-            onboardingData = { name: '', studentEmail: '', university: '', major: '', bio: '', interests: [], project: null };
+            onboardingData = { name: '', studentEmail: '', university: '', universityId: null, major: '', bio: '', interests: [], project: null };
             const profile = UserService.getProfile();
             if (profile.name && profile.name !== 'Unily Member') onboardingData.name = profile.name;
             document.getElementById('onboardingOverlay').classList.add('active');
@@ -4494,7 +4620,7 @@
                     <h3 class="onboarding-title">어느 학교에 재학 중이신가요?</h3>
                     <p class="onboarding-sub">대학교 또는 기관명을 입력해주세요.</p>
                     <div class="form-group">
-                        <input type="text" id="onbUniversity" class="form-control" placeholder="예: Seoul National University" value="${escapeHTML(d.university)}" oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)">
+                        <input type="text" id="onbUniversity" class="form-control" placeholder="예: Seoul National University" value="${escapeHTML(d.university)}" ${d.universityId ? `data-university-id="${d.universityId}"` : ''} oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)">
                     </div>`;
             }
             if (step === 4) {
@@ -4607,7 +4733,9 @@
             } else if (onboardingStep === 2) {
                 onboardingData.studentEmail = document.getElementById('onbEmail').value.trim();
             } else if (onboardingStep === 3) {
-                onboardingData.university = document.getElementById('onbUniversity').value.trim();
+                const uniInput = document.getElementById('onbUniversity');
+                onboardingData.university = uniInput.value.trim();
+                onboardingData.universityId = uniInput.dataset.universityId ? Number(uniInput.dataset.universityId) : null;
             } else if (onboardingStep === 4) {
                 onboardingData.major = document.getElementById('onbMajor').value.trim();
             } else if (onboardingStep === 5) {
@@ -4649,6 +4777,7 @@
             document.getElementById('onboardingStepBody').innerHTML = onboardingStepHTML(onboardingStep);
             onboardingRenderChrome();
             if (onboardingStep === 6) onboardingRenderInterestGrid();
+            if (onboardingStep === 3) initUniversityCombobox('onbUniversity');
             onboardingValidateStep();
         }
 
@@ -4696,6 +4825,7 @@
                 UserService.updateProfile({
                     name: onboardingData.name,
                     university: onboardingData.university,
+                    universityId: onboardingData.universityId || null,
                     major: onboardingData.major,
                     bio: onboardingData.bio,
                     interests: onboardingData.interests.map(key => categoryName(key)),
@@ -4947,7 +5077,11 @@
             document.getElementById('editNameInput').value = profile.name === 'Unily Member' ? '' : profile.name;
             document.getElementById('editBioInput').value = profile.bio;
             if (profile.country) document.getElementById('editCountrySelect').value = profile.country;
-            document.getElementById('editUniversityInput').value = profile.university;
+            const editUniversityInput = document.getElementById('editUniversityInput');
+            editUniversityInput.value = profile.university;
+            if (profile.universityId) editUniversityInput.dataset.universityId = profile.universityId;
+            else delete editUniversityInput.dataset.universityId;
+            initUniversityCombobox('editUniversityInput');
             document.getElementById('editMajorInput').value = profile.major;
             document.getElementById('editInterestsInput').value = profile.interests.join(', ');
 
@@ -4983,15 +5117,17 @@
             const name = document.getElementById('editNameInput').value.trim() || getCurrentUserDisplay().name;
             const bio = document.getElementById('editBioInput').value.trim();
             const country = document.getElementById('editCountrySelect').value;
-            const university = document.getElementById('editUniversityInput').value.trim();
+            const universityInput = document.getElementById('editUniversityInput');
+            const university = universityInput.value.trim();
+            const universityId = universityInput.dataset.universityId ? Number(universityInput.dataset.universityId) : null;
             const major = document.getElementById('editMajorInput').value.trim();
-            UserService.updateProfile({ name, bio, country, university, major, interests, avatar: editAvatarDataUrl });
+            UserService.updateProfile({ name, bio, country, university, universityId, major, interests, avatar: editAvatarDataUrl });
             renderMyPageProfile();
             if (typeof refreshComposerAvatar === 'function') refreshComposerAvatar();
             // 온보딩을 통해 이미 Firestore에 카드가 있는 유저라면, 탐색 탭에서 다른 사람에게 보이는
             // 내 카드도 최신 내용으로 함께 갱신한다 (실패해도 로컬 저장은 이미 끝났으니 조용히 무시).
             if (window.__fbUpdateProfileFields) {
-                window.__fbUpdateProfileFields({ name, bio, country, university, major, interests });
+                window.__fbUpdateProfileFields({ name, bio, country, university, universityId, major, interests });
             }
             alert(await translateText('프로필이 저장되었습니다!', currentLang));
         }
@@ -6936,6 +7072,7 @@
           name: data.name,
           studentEmail: data.studentEmail,
           university: data.university,
+          universityId: data.universityId || null,
           major: data.major,
           bio: data.bio,
           interests: data.interests,
