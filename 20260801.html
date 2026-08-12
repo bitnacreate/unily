@@ -824,8 +824,10 @@
   .msg-preview .read-receipt { flex-shrink: 0; opacity: .6; font-size: 11px; }
   .msg-preview.unread { color: var(--ink); font-weight: 600; }
   .msg-pin-toggle {
-    position: absolute; top: 6px; left: 6px; border: none; background: none; cursor: pointer;
-    font-size: 11px; opacity: 0; transition: opacity .15s ease; padding: 4px; line-height: 1;
+    /* 44px 표준 터치 영역을 다 주면 바로 옆 아바타(대화방 열기 버튼)와 겹쳐버려서, 아바타를
+       가리지 않는 선에서 기존 padding:4px보다는 확실히 넓힌 절충값을 쓴다. */
+    position: absolute; top: 2px; left: 2px; border: none; background: none; cursor: pointer;
+    font-size: 11px; opacity: 0; transition: opacity .15s ease; padding: 8px; line-height: 1;
     transform: rotate(-40deg);
   }
   .msg-item:hover .msg-pin-toggle, .msg-pin-toggle.pinned { opacity: .7; }
@@ -931,6 +933,11 @@
     background: #fff; border: 1px solid var(--line); width: 25px; height: 25px; border-radius: 50%;
     font-size: 11.5px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
+  /* 25px는 터치하기엔 너무 작다 — .icon-btn-tap의 44px 터치 영역을 적용하되, 시각적 이모지
+     크기(font-size)는 그대로 두고 눌림 영역만 키운다. 두 클래스를 합친 선택자를 써서 CSS 소스
+     순서와 무관하게(.chat-bubble-action이 .icon-btn-tap보다 뒤에 있어 그냥 두면 25px가 이긴다)
+     항상 44px가 이기게 한다. */
+  .chat-bubble-action.icon-btn-tap { width: var(--tap-min); height: var(--tap-min); }
   .chat-bubble-action:hover { background: var(--bg-alt); }
   .chat-reaction-picker {
     display: flex; gap: 3px; background: #fff; border: 1px solid var(--line); border-radius: 100px;
@@ -1039,7 +1046,7 @@
   }
   .legal-modal-overlay.active { display: flex; animation: modalOverlayFadeIn .18s ease; }
   .legal-modal {
-    background: #fff; width: 100%; max-width: 640px; max-height: 82vh; border-radius: var(--radius-lg);
+    background: #fff; width: 100%; max-width: 640px; max-height: 82dvh; border-radius: var(--radius-lg);
     box-shadow: 0 30px 60px -20px rgba(30,20,60,.4); display: flex; flex-direction: column; overflow: hidden;
     animation: modalPopIn .28s cubic-bezier(.16,1,.3,1);
   }
@@ -1124,7 +1131,7 @@
   }
   .onboarding-overlay.active { display: flex; animation: modalOverlayFadeIn .18s ease; }
   .onboarding-card {
-    position: relative; background: #fff; width: 100%; max-width: 460px; max-height: 88vh;
+    position: relative; background: #fff; width: 100%; max-width: 460px; max-height: 88dvh;
     border-radius: var(--radius-lg); box-shadow: 0 30px 60px -20px rgba(30,20,60,.4);
     display: flex; flex-direction: column; overflow: hidden;
     animation: modalPopIn .28s cubic-bezier(.16,1,.3,1);
@@ -1354,8 +1361,10 @@
   .comment-text{ font-size:13px; color:var(--ink); line-height:1.55; }
   .comment-translate-note{ font-size:11px; color:var(--ink-soft); margin-top:6px; display:flex; gap:8px; align-items:center; }
   .comment-view-original-btn{ background:none; border:none; color:var(--indigo-deep); font-weight:700; font-size:11px; cursor:pointer; padding:0; }
-  .comment-actions-row{ display:flex; gap:14px; margin-top:6px; padding-left:4px; }
-  .comment-action{ background:none; border:none; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; padding:0; }
+  .comment-actions-row{ display:flex; gap:6px; margin-top:6px; padding-left:4px; }
+  /* 글자 크기만큼만(약 12px) 눌리던 좋아요/답글/신고 버튼 — padding으로 눌림 영역을 키우고,
+     같은 크기의 음수 margin으로 상쇄해서 옆 버튼과의 시각적 간격·줄 높이는 그대로 유지한다. */
+  .comment-action{ background:none; border:none; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; padding:7px 5px; margin:-7px -5px; }
   .comment-action:hover{ color:var(--ink); }
   .comment-action.liked{ color:#E24E76; }
   .comment-replies{ margin-top:10px; padding-left:20px; border-left:2px solid var(--line); display:flex; flex-direction:column; gap:10px; }
@@ -1461,7 +1470,7 @@
     padding:28px 32px; box-shadow:0 20px 40px -25px rgba(90,70,220,.2);
   }
   .comment-author-meta{ font-size:11.5px; color:var(--ink-soft); margin:2px 0 6px; line-height:1.5; }
-  .comment-delete-btn{ background:none; border:none; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; padding:0; }
+  .comment-delete-btn{ background:none; border:none; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; padding:7px 5px; margin:-7px -5px; }
   .comment-delete-btn:hover{ color:#E24E76; }
 
   .related-posts-list{ display:flex; flex-direction:column; gap:14px; }
@@ -4406,8 +4415,8 @@
                 ${translateNoteHtml}
               </div>
               <div class="chat-bubble-hover-actions">
-                <button type="button" class="chat-bubble-action" onclick="toggleReactionPicker('${m.id}')" aria-label="반응 추가">🙂</button>
-                <button type="button" class="chat-bubble-action" onclick="startReplyTo('${m.id}')" aria-label="답장">↩</button>
+                <button type="button" class="chat-bubble-action icon-btn-tap" onclick="toggleReactionPicker('${m.id}')" aria-label="반응 추가">🙂</button>
+                <button type="button" class="chat-bubble-action icon-btn-tap" onclick="startReplyTo('${m.id}')" aria-label="답장">↩</button>
               </div>
             </div>
             ${reactionsHtml}
@@ -6364,7 +6373,7 @@
                     </div>
                     <div class="post-meta-line">${escapeHTML(metaLine)}${metaLine ? ' · ' : ''}${relativeTimeLabel(post.createdAt)}</div>
                   </div>
-                  <button class="post-more-btn" onclick="event.stopPropagation(); openReportModal('post', '${post.id}')" aria-label="Report" title="Report">⋯</button>
+                  <button class="post-more-btn icon-btn-tap" onclick="event.stopPropagation(); openReportModal('post', '${post.id}')" aria-label="Report" title="Report">⋯</button>
                 </div>
 
                 ${post.title ? `<h3 class="post-title" id="post-title-${post.id}">${escapeHTML(titleText)}</h3>` : ''}
