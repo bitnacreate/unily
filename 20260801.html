@@ -1221,21 +1221,55 @@
     .lang-chips { justify-content: center; }
   }
 
-  /* ---------- HEADER MESSAGE ICON (구 알림 종 버튼 자리) ---------- */
+  /* ---------- HEADER 알림 종 + 메시지 아이콘 ---------- */
   .nav-right-actions{ display:flex; align-items:center; gap:16px; }
-  .msg-icon-wrap{ position:relative; }
-  .msg-icon-btn{
+  .notif-icon-wrap, .msg-icon-wrap{ position:relative; }
+  .notif-icon-btn, .msg-icon-btn{
     position:relative; display:flex; align-items:center; justify-content:center;
     background:none; border:none; cursor:pointer; padding:8px; line-height:1; border-radius:50%;
     color:var(--ink-soft); transition:background .15s ease, color .15s ease;
   }
-  .msg-icon-btn svg{ width:21px; height:21px; }
-  .msg-icon-btn:hover{ background:var(--bg-alt); color:var(--ink); }
+  .notif-icon-btn svg, .msg-icon-btn svg{ width:21px; height:21px; }
+  .notif-icon-btn:hover, .msg-icon-btn:hover{ background:var(--bg-alt); color:var(--ink); }
   .msg-icon-badge{
     position:absolute; top:2px; right:2px; min-width:16px; height:16px; padding:0 4px; border-radius:100px;
     background:#FF5D8F; border:2px solid #F7F5FC; color:#fff; font-size:10px; font-weight:700;
     display:flex; align-items:center; justify-content:center; line-height:1;
   }
+
+  /* 알림 드롭다운 — 다른 실제 유저가 나에게 Connect(대화 시작/프로젝트 참여 요청)를 보내면 뜬다.
+     LinkedIn/Instagram류: 종 아이콘 아래 카드형 패널에 아바타 + 이름 + 학교·전공 + 시간을 나열. */
+  .notif-dropdown{
+    position:absolute; top:calc(100% + 10px); right:0; z-index:200;
+    width:min(360px, 88vw); max-height:min(440px, 70dvh);
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius-lg);
+    box-shadow:0 25px 50px -18px rgba(36,31,56,.35), 0 8px 20px -8px rgba(122,112,242,.25);
+    display:none; flex-direction:column; overflow:hidden;
+    opacity:0; transform:translateY(6px) scale(.97); transition:opacity .15s ease, transform .15s ease;
+  }
+  .notif-dropdown.active{ display:flex; opacity:1; transform:translateY(0) scale(1); }
+  .notif-dropdown-header{ padding:16px 20px; border-bottom:1px solid var(--line); font-size:15px; font-weight:700; flex-shrink:0; }
+  .notif-list{ overflow-y:auto; flex:1; min-height:0; padding:6px; }
+  .notif-item{
+    width:100%; display:flex; align-items:flex-start; gap:12px; text-align:left;
+    border:none; background:none; cursor:pointer; padding:12px 14px; border-radius:var(--radius-md);
+    transition:background .15s ease;
+  }
+  .notif-item:hover{ background:var(--bg-alt); }
+  .notif-item.unread{ background:#F5F2FF; }
+  .notif-item.unread:hover{ background:#EFEBFB; }
+  .notif-item-avatar{
+    width:40px; height:40px; border-radius:50%; flex-shrink:0; color:#fff; font-weight:700; font-size:15px;
+    display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif;
+  }
+  .notif-item-body{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .notif-item-text{ font-size:13.5px; font-weight:600; color:var(--ink); line-height:1.4; }
+  .notif-item-sub{ font-size:12px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .notif-item-time{ font-size:11px; color:var(--ink-faint, var(--ink-soft)); margin-top:2px; }
+  .notif-empty{ padding:40px 24px; text-align:center; font-size:13px; color:var(--ink-soft); }
+  .notif-login-prompt{ padding:32px 24px; text-align:center; }
+  .notif-login-icon{ font-size:26px; margin-bottom:10px; }
+  .notif-login-msg{ font-size:13px; color:var(--ink-soft); margin-bottom:16px; line-height:1.5; }
 
   /* ---------- COMMUNITY ---------- */
   .community-layout{ display:grid; grid-template-columns:210px 1fr 280px; gap:22px; padding-bottom:90px; align-items:start; }
@@ -1639,6 +1673,16 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
             </button>
             <div class="nav-right-actions">
+                <div class="notif-icon-wrap">
+                    <button type="button" class="notif-icon-btn icon-btn-tap" id="notifBellBtn" onclick="toggleNotifPanel(event)" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 6.5-2.5 8.5-2.5 8.5h17S18 14.5 18 8z" /><path d="M13.73 20.5a2 2 0 0 1-3.46 0" /></svg>
+                        <span class="msg-icon-badge" id="notifBadge" style="display:none;">0</span>
+                    </button>
+                    <div class="notif-dropdown" id="notifPanel" role="menu">
+                        <div class="notif-dropdown-header" data-i18n="notif_title">알림</div>
+                        <div class="notif-list" id="notifList"></div>
+                    </div>
+                </div>
                 <div class="msg-icon-wrap">
                     <button class="msg-icon-btn icon-btn-tap" id="msgIconBtn" onclick="showPage('messages')" aria-label="Messages">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
@@ -2187,13 +2231,6 @@
                         <span class="settings-toggle-slider"></span>
                     </label>
                 </div>
-                <div class="settings-row">
-                    <div class="settings-row-label" data-i18n="settings_notifications">알림 설정</div>
-                    <label class="settings-toggle">
-                        <input type="checkbox" id="notifSettingToggle" onchange="toggleNotificationSetting(this.checked)">
-                        <span class="settings-toggle-slider"></span>
-                    </label>
-                </div>
                 <div class="settings-row settings-lang-row">
                     <div class="settings-row-label" data-i18n="settings_language">언어 설정</div>
                     <div class="settings-lang-btns" id="settingsLangBtns"></div>
@@ -2458,6 +2495,7 @@
                 nav_explore: "탐색",
                 nav_community: "커뮤니티",
                 nav_mypage: "마이페이지",
+                notif_title: "알림",
                 community_title: "글로벌 학생 커뮤니티",
                 community_tagline: "자신의 언어로 쓰면, 모두가 자신의 언어로 읽어요.",
                 categories_title: "카테고리",
@@ -2567,7 +2605,6 @@
                 edit_save_btn: "저장하기",
                 settings_profile_visibility: "학생 카드 공개",
                 settings_profile_visibility_desc: '꺼두면 "전세계 매칭 탐색" 탭과 다른 사람의 검색 결과에 내 카드가 더 이상 보이지 않아요.',
-                settings_notifications: "알림 설정",
                 settings_language: "언어 설정",
                 saved_title: "저장한 학생",
                 saved_empty: "아직 저장한 학생이 없어요. 하트 아이콘을 눌러 관심있는 학생을 저장해보세요."
@@ -2690,7 +2727,6 @@
                 edit_save_btn: "Save Changes",
                 settings_profile_visibility: "Card Visibility",
                 settings_profile_visibility_desc: "Turn this off and your card stops appearing in Global Match Explore and other people's search results.",
-                settings_notifications: "Notifications",
                 settings_language: "Language",
                 saved_title: "Saved Students",
                 saved_empty: "You haven't saved any students yet. Tap the heart icon to save profiles you're interested in."
@@ -5382,12 +5418,7 @@
         }
 
         /* ---------- 설정 ---------- */
-        function toggleNotificationSetting(enabled) {
-            NotificationService.setEnabled(enabled);
-        }
         function renderSettingsTab() {
-            const toggle = document.getElementById('notifSettingToggle');
-            if (toggle) toggle.checked = NotificationService.isEnabled();
             refreshProfileVisibilityToggle();
 
             const langBtnsEl = document.getElementById('settingsLangBtns');
@@ -5576,8 +5607,8 @@
     <!-- ==================================================================
          COMMUNITY FEATURE
          - 지금은 전부 Mock Data(JavaScript 객체)를 Promise로 감싸 반환하지만,
-           나중에 실제 백엔드가 생기면 CommunityService / TranslationService /
-           NotificationService 내부 구현만 fetch(API) 호출로 바꾸면 되고,
+           나중에 실제 백엔드가 생기면 CommunityService / TranslationService
+           내부 구현만 fetch(API) 호출로 바꾸면 되고,
            이 서비스들을 호출하는 렌더링 코드는 전혀 손댈 필요가 없도록 분리했다.
          ================================================================== -->
     <script>
@@ -5672,15 +5703,19 @@
         };
         function commentsTitleText(n) { const fn = COMMENTS_TITLE_TEMPLATES[currentLang] || COMMENTS_TITLE_TEMPLATES.en; return fn(n); }
 
-        const NOTIF_TEMPLATES = {
-            like: { ko: n => `${n}님이 회원님의 게시글을 좋아합니다.`, en: n => `${n} liked your post.`, fr: n => `${n} a aimé votre publication.`, es: n => `A ${n} le gustó tu publicación.`, de: n => `${n} gefällt dein Beitrag.`, ja: n => `${n}さんがあなたの投稿にいいねしました。`, 'zh-CN': n => `${n}赞了你的帖子。` },
-            comment: { ko: n => `${n}님이 회원님의 게시글에 댓글을 남겼습니다.`, en: n => `${n} commented on your post.`, fr: n => `${n} a commenté votre publication.`, es: n => `${n} comentó tu publicación.`, de: n => `${n} hat deinen Beitrag kommentiert.`, ja: n => `${n}さんがあなたの投稿にコメントしました。`, 'zh-CN': n => `${n}评论了你的帖子。` },
-            reply: { ko: n => `${n}님이 회원님의 댓글에 답글을 남겼습니다.`, en: n => `${n} replied to your comment.`, fr: n => `${n} a répondu à votre commentaire.`, es: n => `${n} respondió a tu comentario.`, de: n => `${n} hat auf deinen Kommentar geantwortet.`, ja: n => `${n}さんがあなたのコメントに返信しました。`, 'zh-CN': n => `${n}回复了你的评论。` }
+        // 실제 유저가 Connect(=1:1 대화 시작, 프로젝트의 "참여하기"도 결국 같은 액션)를 보냈을 때 뜨는
+        // 알림 문구. 이름만 끼워 넣는 템플릿이라 커뮤니티의 다른 사전들과 동일한 패턴을 그대로 쓴다.
+        const NOTIF_CONNECT_TEXT = {
+            ko: n => `${n}님이 대화를 시작했어요`,
+            en: n => `${n} started a conversation with you`,
+            fr: n => `${n} a commencé une conversation avec vous`,
+            es: n => `${n} inició una conversación contigo`,
+            de: n => `${n} hat ein Gespräch mit dir begonnen`,
+            ja: n => `${n}さんが会話を始めました`,
+            'zh-CN': n => `${n}向你发起了对话`
         };
-        const NOTIF_TYPE_ICON = { like: '❤️', comment: '💬', reply: '↩️' };
-        function notifText(type, name) {
-            const dict = NOTIF_TEMPLATES[type] || NOTIF_TEMPLATES.comment;
-            const fn = dict[currentLang] || dict.en;
+        function notifConnectText(name) {
+            const fn = NOTIF_CONNECT_TEXT[currentLang] || NOTIF_CONNECT_TEXT.en;
             return fn(name);
         }
         function notifEmptyText() {
@@ -5838,8 +5873,6 @@
         function isPostLiked(id) { return !!getCommunityLikes().posts[id]; }
         function isCommentLiked(id) { return !!getCommunityLikes().comments[id]; }
 
-        const NOTIFICATIONS_KEY = 'unily_notifications';
-
         /* ==================================================================
            SERVICE LAYER
            ================================================================== */
@@ -5885,45 +5918,6 @@
             }
 
             return { translate, getCached };
-        })();
-
-        // NotificationService: 지금은 LocalStorage를 "서버"처럼 쓰지만,
-        // getAll/create/markAllRead/unreadCount 인터페이스만 유지하면 나중에
-        // 실제 알림 API + WebSocket 등으로 교체해도 호출부는 그대로 쓸 수 있다.
-        const NOTIFICATION_SETTINGS_KEY = 'unily_notification_settings';
-        const NotificationService = (function () {
-            function getNotifications() {
-                try { return JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]'); }
-                catch (err) { return []; }
-            }
-            function saveAll(list) { localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(list)); }
-            function isEnabled() {
-                try {
-                    const s = JSON.parse(localStorage.getItem(NOTIFICATION_SETTINGS_KEY) || 'null');
-                    return !s || s.enabled !== false;
-                } catch (err) { return true; }
-            }
-            function setEnabled(enabled) {
-                localStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify({ enabled }));
-            }
-            function create({ type, actorId, actorName, postId, postTitle }) {
-                if (!isEnabled()) return;
-                const list = getNotifications();
-                list.unshift({ id: 'n' + Date.now() + Math.floor(Math.random() * 1000), type, actorId, actorName, postId, postTitle, createdAt: Date.now(), read: false });
-                saveAll(list.slice(0, 30));
-                renderNotifBadge();
-            }
-            function markAllRead() {
-                saveAll(getNotifications().map(n => Object.assign({}, n, { read: true })));
-                renderNotifBadge();
-            }
-            function markAsRead(id) {
-                saveAll(getNotifications().map(n => n.id === id ? Object.assign({}, n, { read: true }) : n));
-                renderNotifBadge();
-            }
-            function unreadCount() { return getNotifications().filter(n => !n.read).length; }
-            function hasUnreadNotifications() { return unreadCount() > 0; }
-            return { getNotifications, create, markAllRead, markAsRead, unreadCount, hasUnreadNotifications, isEnabled, setEnabled };
         })();
 
         // CommunityService: 지금은 COMMUNITY_POSTS 배열을 Promise로 감싸 반환하지만,
@@ -6935,12 +6929,17 @@
             activeReportTarget = null;
         }
 
-        /* ---------- NOTIFICATIONS UI ---------- */
+        /* ---------- NOTIFICATIONS UI (실제 유저의 Connect/프로젝트 참여 요청, Firestore 실시간) ---------- */
         function renderNotifBadge() {
             const badge = document.getElementById('notifBadge');
             if (!badge) return;
-            const hasUnread = AuthService.isLoggedIn() && NotificationService.hasUnreadNotifications();
-            badge.style.display = hasUnread ? 'block' : 'none';
+            const unread = (window.__REAL_NOTIFICATIONS || []).filter(n => !n.read).length;
+            if (unread > 0) {
+                badge.textContent = unread > 9 ? '9+' : String(unread);
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
         }
         // 로그인하지 않은 상태에서 알림 아이콘을 누르면 알림 내용 대신 로그인 유도 UI를 보여준다.
         function renderNotifLoginPrompt() {
@@ -6959,56 +6958,61 @@
             if (!list) return;
             if (!AuthService.isLoggedIn()) { renderNotifLoginPrompt(); return; }
 
-            const items = NotificationService.getNotifications();
+            const items = window.__REAL_NOTIFICATIONS || [];
             if (items.length === 0) {
                 list.innerHTML = `<div class="notif-empty">${notifEmptyText()}</div>`;
                 return;
             }
             list.innerHTML = items.map(n => {
-                const actor = students.find(s => s.id === n.actorId);
-                const avatarHTML = actor
-                    ? `<span class="notif-item-avatar" style="background:${actor.badgeGradient}">${actor.name.charAt(0)}</span>`
-                    : `<span class="notif-item-icon">${NOTIF_TYPE_ICON[n.type] || '🔔'}</span>`;
-                const homeInfo = actor ? HOME_COUNTRY_INFO[actor.country] : null;
-                const countryLabel = homeInfo ? (homeInfo.names[currentLang] || homeInfo.names.en) : '';
-                const subLine = actor ? `${actor.flag} ${countryLabel}${countryLabel ? ' · ' : ''}${actor.university}` : '';
+                const initial = (n.actorName || '?').trim().charAt(0).toUpperCase() || '?';
+                const subLine = [n.actorUniversity, n.actorMajor].filter(Boolean).join(' · ');
                 return `
-              <div class="notif-item${n.read ? '' : ' unread'}" onclick="goToNotification('${n.id}', ${n.postId ? `'${n.postId}'` : 'null'})">
-                ${avatarHTML}
-                <div>
-                  <div class="notif-item-text">${notifText(n.type, n.actorName)}</div>
-                  ${subLine ? `<div class="notif-item-sub">${escapeHTML(subLine)}</div>` : ''}
-                  ${n.postTitle ? `<div class="notif-item-post">"${escapeHTML(n.postTitle)}"</div>` : ''}
-                  <div class="notif-item-time">${relativeTimeLabel(n.createdAt)}</div>
-                </div>
-              </div>
+              <button type="button" class="notif-item${n.read ? '' : ' unread'}" onclick="goToNotification('${n.id}', '${n.chatId || ''}')">
+                <span class="notif-item-avatar" style="background:${gradientForUid(n.actorUid)}">${escapeHTML(initial)}</span>
+                <span class="notif-item-body">
+                  <span class="notif-item-text">${escapeHTML(notifConnectText(n.actorName || ''))}</span>
+                  ${subLine ? `<span class="notif-item-sub">${escapeHTML(subLine)}</span>` : ''}
+                  <span class="notif-item-time">${relativeTimeLabel(n.createdAt)}</span>
+                </span>
+              </button>
             `;
             }).join('');
         }
-        function goToNotification(notifId, postId) {
-            NotificationService.markAsRead(notifId);
+        function goToNotification(notifId, chatId) {
+            if (window.__fbMarkNotificationRead) window.__fbMarkNotificationRead(notifId);
             document.getElementById('notifPanel').classList.remove('active');
-            if (postId) openPostDetail(postId);
+            if (chatId) { showPage('messages'); selectChat(chatId); }
         }
         function toggleNotifPanel(e) {
             if (e) e.stopPropagation();
             const panel = document.getElementById('notifPanel');
+            const bell = document.getElementById('notifBellBtn');
             if (!panel) return;
             if (panel.classList.contains('active')) {
                 panel.classList.remove('active');
+                if (bell) bell.setAttribute('aria-expanded', 'false');
                 return;
             }
             renderNotifPanel();
             panel.classList.add('active');
-            if (AuthService.isLoggedIn()) NotificationService.markAllRead();
+            if (bell) bell.setAttribute('aria-expanded', 'true');
+            if (AuthService.isLoggedIn() && window.__fbMarkAllNotificationsRead) window.__fbMarkAllNotificationsRead();
         }
         document.addEventListener('click', (e) => {
             const panel = document.getElementById('notifPanel');
             const bell = document.getElementById('notifBellBtn');
-            if (panel && panel.classList.contains('active') && !panel.contains(e.target) && e.target !== bell) {
+            if (panel && panel.classList.contains('active') && !panel.contains(e.target) && !(bell && bell.contains(e.target))) {
                 panel.classList.remove('active');
+                if (bell) bell.setAttribute('aria-expanded', 'false');
             }
         });
+        // Firestore 알림 구독 훅(모듈 스크립트) — 새 알림이 오거나 읽음 처리될 때마다 배지/열려있는
+        // 패널을 갱신한다. mockChats 안 읽음 배지와 동일한 패턴.
+        window.__onNotificationsChange = function () {
+            renderNotifBadge();
+            const panel = document.getElementById('notifPanel');
+            if (panel && panel.classList.contains('active')) renderNotifPanel();
+        };
 
         /* ---------- REAL-TIME 시뮬레이션 (실제 서버 없이 "새 글/알림"을 흉내) ---------- */
         const REALTIME_INCOMING_POOL = [
@@ -7048,7 +7052,7 @@
             const myPosts = COMMUNITY_POSTS.filter(p => p.authorId === 'me');
             const actor = students[Math.floor(Math.random() * students.length)];
 
-            // 내 댓글에 달린 답글이 있으면 가끔 "답글" 알림도 시뮬레이션한다.
+            // 내 댓글에 달린 답글이 가끔 오는 것도 시뮬레이션한다.
             const myCommentTargets = [];
             COMMUNITY_POSTS.forEach(p => (p.comments || []).forEach(c => {
                 if (c.authorId === 'me') myCommentTargets.push({ post: p, comment: c });
@@ -7058,15 +7062,12 @@
             if (myCommentTargets.length > 0 && roll < 0.25) {
                 const target = myCommentTargets[Math.floor(Math.random() * myCommentTargets.length)];
                 target.comment.replies = [...(target.comment.replies || []), { id: 'c' + Date.now(), authorId: actor.id, lang: 'en', text: 'Totally agree with this!', likes: 0, createdAt: Date.now() }];
-                NotificationService.create({ type: 'reply', actorId: actor.id, actorName: actor.name, postId: target.post.id, postTitle: target.post.title || target.post.body });
             } else if (myPosts.length > 0) {
                 const target = myPosts[Math.floor(Math.random() * myPosts.length)];
                 if (roll < 0.65) {
                     target.likes += 1;
-                    NotificationService.create({ type: 'like', actorId: actor.id, actorName: actor.name, postId: target.id, postTitle: target.title || target.body });
                 } else {
                     target.comments = [...(target.comments || []), { id: 'c' + Date.now(), authorId: actor.id, lang: 'en', text: 'Nice post! 👍', likes: 0, createdAt: Date.now(), replies: [] }];
-                    NotificationService.create({ type: 'comment', actorId: actor.id, actorName: actor.name, postId: target.id, postTitle: target.title || target.body });
                 }
             } else {
                 return;
@@ -7281,12 +7282,14 @@
         const messagesPageActive = document.getElementById("page-messages")?.classList.contains("active");
         if (messagesPageActive && window.__subscribeChatList) window.__subscribeChatList();
 
-        // AI 학생과의 대화(mockChats) 목록은 헤더의 안 읽음 배지가 페이지와 무관하게 항상 정확해야 하므로,
-        // 실제 대화 목록과 달리 로그인해 있는 동안은 항상 구독해둔다(로그아웃하면 해제).
+        // AI 학생과의 대화(mockChats) 목록 및 알림도 헤더 배지가 페이지와 무관하게 항상 정확해야
+        // 하므로, 실제 대화 목록과 달리 로그인해 있는 동안은 항상 구독해둔다(로그아웃하면 해제).
         if (auth.currentUser) {
           if (window.__subscribeMockChatList) window.__subscribeMockChatList();
-        } else if (window.__unsubscribeMockChatList) {
-          window.__unsubscribeMockChatList();
+          if (window.__subscribeNotifications) window.__subscribeNotifications();
+        } else {
+          if (window.__unsubscribeMockChatList) window.__unsubscribeMockChatList();
+          if (window.__unsubscribeNotifications) window.__unsubscribeNotifications();
         }
       });
       const ai = getAI(app, { backend: new GoogleAIBackend() });
@@ -7904,11 +7907,77 @@
             pinnedBy: [],
             deletedFor: [],
           });
+          // 진짜 처음 연결하는 대화일 때만: 상대에게 "OO님이 대화를 시작했어요" 알림을 보낸다.
+          // 실패해도 대화 자체는 이미 만들어졌으니 채팅 시작 자체를 막지는 않는다(fire-and-forget).
+          createConnectNotification(myUid, otherUid, chatId).catch((err) =>
+            console.error("Connect 알림 생성 실패:", err)
+          );
         } else if ((snap.data().deletedFor || []).includes(myUid)) {
           // 예전에 나만 목록에서 지웠던 대화라면, 다시 시작할 때 내 목록에 복원한다.
           await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
         }
         return chatId;
+      };
+
+      /* ==================================================================
+         알림 (Firestore notifications/{notifId}) — 실제 유저가 나에게 Connect(대화 시작,
+         프로젝트 "참여하기"도 결국 같은 액션)를 보내면 만들어진다. mockChats 안 읽음 배지와
+         똑같이, 로그인해 있는 동안은 페이지와 무관하게 항상 구독해서 헤더 종 배지가 항상 정확하게 한다.
+         ================================================================== */
+      async function createConnectNotification(myUid, otherUid, chatId) {
+        const meSnap = await getDoc(doc(db, "users", myUid));
+        const me = meSnap.exists() ? meSnap.data() : {};
+        await addDoc(collection(db, "notifications"), {
+          recipientUid: otherUid,
+          type: "connect",
+          actorUid: myUid,
+          actorName: me.name || auth.currentUser.displayName || "",
+          actorUniversity: me.university || "",
+          actorMajor: me.major || "",
+          chatId,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      window.__REAL_NOTIFICATIONS = [];
+      let unsubNotifications = null;
+      window.__subscribeNotifications = function () {
+        if (unsubNotifications || !auth.currentUser) return;
+        // mockChats 목록과 같은 이유로 orderBy를 쿼리에 안 넣는다: recipientUid 등호 필터에
+        // createdAt orderBy까지 같이 걸면 복합 색인이 필요해져서, 색인을 만들기 전까진 이 쿼리
+        // 자체가 계속 실패한다 — 정렬은 받은 뒤 클라이언트에서 하는 쪽이 훨씬 간단하고 안전하다.
+        const qy = query(collection(db, "notifications"), where("recipientUid", "==", auth.currentUser.uid));
+        unsubNotifications = onSnapshot(qy, (snap) => {
+          const list = snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              type: data.type,
+              actorUid: data.actorUid,
+              actorName: data.actorName || "",
+              actorUniversity: data.actorUniversity || "",
+              actorMajor: data.actorMajor || "",
+              chatId: data.chatId || null,
+              read: !!data.read,
+              createdAt: toMillis(data.createdAt),
+            };
+          });
+          list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          window.__REAL_NOTIFICATIONS = list.slice(0, 50);
+          if (typeof window.__onNotificationsChange === "function") window.__onNotificationsChange();
+        });
+      };
+      window.__unsubscribeNotifications = function () {
+        if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
+        window.__REAL_NOTIFICATIONS = [];
+      };
+      window.__fbMarkNotificationRead = function (notifId) {
+        return updateDoc(doc(db, "notifications", notifId), { read: true }).catch(() => {});
+      };
+      window.__fbMarkAllNotificationsRead = function () {
+        const unread = (window.__REAL_NOTIFICATIONS || []).filter((n) => !n.read);
+        return Promise.all(unread.map((n) => window.__fbMarkNotificationRead(n.id)));
       };
 
       window.__sendChatMessage = async function (chatId, text, replyTo, lang) {
