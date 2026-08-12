@@ -271,6 +271,11 @@
   .stat-uni-hover:focus-visible .stat-hover-popover{
     opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0) scale(1);
   }
+  /* 영문 마이크로카피("Click to explore 1,200+ verified universities")가 nowrap 알약 모양이라,
+     좁은 폰 화면에서는 트리거보다 훨씬 넓어져 화면 밖으로 잘려나갔다 — 줄바꿈을 허용하고 폭을 제한한다. */
+  @media (max-width:480px){
+    .stat-hover-popover{ white-space:normal; max-width:min(260px, 80vw); text-align:left; align-items:flex-start; }
+  }
 
   /* "7개 지원 언어" 통계 — 대학 통계와 달리 클릭해서 이동하는 링크가 아니라, 호버/포커스 시
      실제로 어떤 언어로 번역되는지 알려주는 순수 정보성 팝오버라서 밑줄/포인터 커서를 주지 않는다. */
@@ -295,6 +300,15 @@
   .stat-lang-hover:hover .stat-hover-popover,
   .stat-lang-hover:focus-visible .stat-hover-popover{
     opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0) scale(1);
+  }
+
+  /* 히어로 섹션(헤드라인/CTA + 지구본 일러스트)이 2단 그리드로 고정돼 있어서, 좁은 화면에서는
+     양쪽이 반씩 눌려 헤드라인이 심하게 줄바꿈되고 지구본도 찌그러져 보이던 문제.
+     900px(태블릿→모바일, 레이아웃 1열 전환 기준)부터 세로로 쌓는다 — 헤드라인이 원래 DOM 순서상
+     먼저 오므로 순서 조정 없이 그대로 위에, 지구본은 아래에 온다. */
+  @media (max-width:900px){
+    .hero-grid{ grid-template-columns:1fr; gap:44px; }
+    .globe-wrap{ max-width:380px; margin:0 auto; }
   }
 
   /* GLOBE CARD */
@@ -508,6 +522,9 @@
   .profile-modal{
     position:relative; background:#fff; width:100%; max-width:420px; border-radius:var(--radius-lg);
     padding:36px 32px; text-align:center; box-shadow:0 30px 60px -20px rgba(30,20,60,.4);
+    /* 자기소개/프로젝트 모집/Dream Exchange 칩까지 다 있는 카드는 내용이 길어질 수 있어서,
+       화면이 짧은 모바일에서는 오버레이 padding(20px×2)을 넘는 순간 스크롤 없이 잘려 보였다. */
+    max-height:calc(100dvh - 40px); overflow-y:auto;
   }
   .profile-modal-close{
     position:absolute; top:16px; right:16px; border-radius:50%;
@@ -590,6 +607,7 @@
   .simple-modal{
     background:#fff; width:100%; max-width:360px; border-radius:var(--radius-lg);
     padding:32px 28px; text-align:center; box-shadow:0 30px 60px -20px rgba(30,20,60,.4);
+    max-height:calc(100dvh - 40px); overflow-y:auto;
   }
   .simple-modal-icon{ font-size:clamp(28px,5vw,36px); margin-bottom:12px; }
   .simple-modal-title{ font-size:18px; font-weight:700; margin-bottom:8px; }
@@ -1063,6 +1081,8 @@
   @media (max-width: 600px) {
     .uni-directory-controls { flex-direction: column; }
     .uni-directory-controls .select-wrap { width: 100%; }
+    .legal-modal-header, .legal-modal-body, .legal-modal-footer, .uni-directory-controls { padding-left: 18px; padding-right: 18px; }
+    .uni-directory-item { padding-left: 18px; padding-right: 18px; }
   }
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink-soft); }
@@ -1177,12 +1197,15 @@
   .footer-links{ display:flex; gap:26px; font-size:13.5px; color:var(--ink-soft); font-weight:500; }
   .footer-copy{ font-size:13px; color:var(--ink-soft); }
 
-  @media (max-width:960px){ 
+  @media (max-width:960px){
     .why-grid, .stories-grid, .card-grid{ grid-template-columns:repeat(2,1fr); }
     .messages-container { grid-template-columns: 1fr; }
     .msg-chat-area { display: none; }
     .messages-container.chat-open .msg-sidebar { display: none; }
     .messages-container.chat-open .msg-chat-area { display: flex; }
+    /* 680px 고정 높이는 데스크톱 기준값이라, 좁은 화면(특히 세로가 짧은 폰)에서 메시지함이
+       뷰포트를 넘기거나 반대로 아래 여백이 과하게 남았다 — 화면 높이에 맞춰 채우도록 바꾼다. */
+    .messages-container { height: calc(100dvh - 210px); min-height: 420px; margin: 18px 0 28px; }
   }
   @media (max-width:720px){
     .why-grid, .stories-grid, .card-grid{ grid-template-columns:1fr; }
