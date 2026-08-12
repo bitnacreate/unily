@@ -7048,36 +7048,8 @@
             renderTrending();
             renderFeed(true);
         }
-        function simulateEngagementOnMyPosts() {
-            const myPosts = COMMUNITY_POSTS.filter(p => p.authorId === 'me');
-            const actor = students[Math.floor(Math.random() * students.length)];
-
-            // 내 댓글에 달린 답글이 가끔 오는 것도 시뮬레이션한다.
-            const myCommentTargets = [];
-            COMMUNITY_POSTS.forEach(p => (p.comments || []).forEach(c => {
-                if (c.authorId === 'me') myCommentTargets.push({ post: p, comment: c });
-            }));
-
-            const roll = Math.random();
-            if (myCommentTargets.length > 0 && roll < 0.25) {
-                const target = myCommentTargets[Math.floor(Math.random() * myCommentTargets.length)];
-                target.comment.replies = [...(target.comment.replies || []), { id: 'c' + Date.now(), authorId: actor.id, lang: 'en', text: 'Totally agree with this!', likes: 0, createdAt: Date.now() }];
-            } else if (myPosts.length > 0) {
-                const target = myPosts[Math.floor(Math.random() * myPosts.length)];
-                if (roll < 0.65) {
-                    target.likes += 1;
-                } else {
-                    target.comments = [...(target.comments || []), { id: 'c' + Date.now(), authorId: actor.id, lang: 'en', text: 'Nice post! 👍', likes: 0, createdAt: Date.now(), replies: [] }];
-                }
-            } else {
-                return;
-            }
-            const communityPage = document.getElementById('page-community');
-            if (communityPage && communityPage.classList.contains('active')) renderFeed(false);
-        }
         function realtimeTick() {
-            if (Math.random() < 0.6) simulateIncomingPost();
-            else simulateEngagementOnMyPosts();
+            simulateIncomingPost();
         }
 
         /* ---------- 언어 전환 시 Community 화면도 함께 갱신 ---------- */
