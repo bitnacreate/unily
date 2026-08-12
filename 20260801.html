@@ -3427,7 +3427,7 @@
             return {
                 id: record.id, otherUid: null, otherName: record.otherName,
                 otherUniShort: record.otherUniShort, otherBadgeGradient: record.otherBadgeGradient,
-                lastMessage: record.lastMessage, lastMessageSenderUid: null,
+                lastMessage: record.lastMessage, lastMessageLang: record.lastMessageLang || null, lastMessageSenderUid: null,
                 updatedAt: record.updatedAt, unreadCount: record.unreadCount || 0,
                 pinned: !!record.pinned, otherLastReadAt: 0, isMock: true, studentId: record.studentId,
             };
@@ -4193,6 +4193,11 @@
                 const readIcon = mineLast
                     ? `<span class="read-receipt">${c.otherLastReadAt && c.otherLastReadAt >= c.updatedAt ? '✓✓' : '✓'}</span>`
                     : '';
+                // 목록 미리보기도 설정된 사이트 언어로 보여준다 — lastMessageLang이 없는(이 기능 이전에
+                // 온) 대화는 번역 대상에서 조용히 제외하고 원문 그대로 보여준다.
+                const needsTranslation = c.lastMessageLang && c.lastMessageLang !== currentLang;
+                const cachedPreview = needsTranslation ? TranslationService.getCached(c.lastMessageLang, currentLang, c.lastMessage || '') : undefined;
+                const previewText = needsTranslation && cachedPreview !== undefined ? cachedPreview : (c.lastMessage || '');
                 return `
           <div class="msg-item ${c.id === currentChatId ? 'active' : ''}" onclick="selectChat('${c.id}')">
             <button type="button" class="msg-pin-toggle${c.pinned ? ' pinned' : ''}" onclick="event.stopPropagation(); togglePinChat('${c.id}', ${c.pinned})" aria-label="${c.pinned ? '고정 해제' : '대화 고정'}">📌</button>
@@ -4205,11 +4210,27 @@
                 <span class="msg-name">${escapeHTML(c.otherName || 'Unknown')}</span>
                 <span class="msg-time">${c.updatedAt ? relativeTimeLabel(c.updatedAt) : ''}</span>
               </div>
-              <div class="msg-preview${unread ? ' unread' : ''}">${readIcon}${escapeHTML(c.lastMessage || '')}</div>
+              <div class="msg-preview${unread ? ' unread' : ''}">${readIcon}<span id="msg-preview-text-${c.id}">${escapeHTML(previewText)}</span></div>
             </div>
           </div>
         `;
             }).join('');
+            queueMessageListTranslations(chats);
+        }
+
+        // 캐시에 없는 마지막 메시지 미리보기는 번역이 끝나는 대로 해당 항목만 조용히 갱신한다
+        // (커뮤니티 피드의 queueTranslations와 동일한 패턴).
+        function queueMessageListTranslations(chats) {
+            chats.forEach(c => {
+                if (!c.lastMessageLang || c.lastMessageLang === currentLang) return;
+                const cached = TranslationService.getCached(c.lastMessageLang, currentLang, c.lastMessage || '');
+                if (cached !== undefined) return;
+                const lang = c.lastMessageLang, text = c.lastMessage || '', id = c.id;
+                TranslationService.translate(text, lang, currentLang).then(translated => {
+                    const el = document.getElementById('msg-preview-text-' + id);
+                    if (el) el.textContent = translated;
+                });
+            });
         }
 
 
@@ -7685,6 +7706,7 @@
                 otherUid,
                 otherName: otherInfo.name || "Unknown",
                 lastMessage: data.lastMessage || "",
+                lastMessageLang: data.lastMessageLang || null,
                 lastMessageSenderUid: data.lastMessageSenderUid || null,
                 updatedAt: toMillis(data.updatedAt),
                 unreadCount: unreadMap[myUid] || 0,
@@ -7753,7 +7775,7 @@
             return {
               id: d.id, studentId: data.studentId, otherName: data.otherName,
               otherUniShort: data.otherUniShort, otherBadgeGradient: data.otherBadgeGradient,
-              lastMessage: data.lastMessage || "", updatedAt: toMillis(data.updatedAt),
+              lastMessage: data.lastMessage || "", lastMessageLang: data.lastMessageLang || null, updatedAt: toMillis(data.updatedAt),
               unreadCount: data.unreadCount || 0, pinned: !!data.pinned,
             };
           });
@@ -7800,7 +7822,7 @@
         if (existing.exists()) return chatId;
         await setDoc(chatRef, {
           ownerUid: uid, studentId, otherName: meta.otherName, otherUniShort: meta.otherUniShort,
-          otherBadgeGradient: meta.otherBadgeGradient, lastMessage: greetingText,
+          otherBadgeGradient: meta.otherBadgeGradient, lastMessage: greetingText, lastMessageLang: greetingLang,
           updatedAt: serverTimestamp(), unreadCount: 0, pinned: false,
         });
         await addDoc(collection(db, "mockChats", chatId, "messages"), {
@@ -7814,7 +7836,7 @@
         const msgData = { senderUid: auth.currentUser.uid, text, lang, createdAt: serverTimestamp() };
         if (replyTo) msgData.replyTo = replyTo;
         await addDoc(collection(db, "mockChats", chatId, "messages"), msgData);
-        await updateDoc(doc(db, "mockChats", chatId), { lastMessage: text, updatedAt: serverTimestamp() });
+        await updateDoc(doc(db, "mockChats", chatId), { lastMessage: text, lastMessageLang: lang, updatedAt: serverTimestamp() });
       };
 
       // AI 학생의 답장을 저장한다. 지금 그 대화방을 보고 있지 않을 때만 unreadCount를 올린다.
@@ -7822,7 +7844,7 @@
         await addDoc(collection(db, "mockChats", chatId, "messages"), {
           senderUid: "mock-bot", text, lang, createdAt: serverTimestamp(),
         });
-        const updates = { lastMessage: text, updatedAt: serverTimestamp() };
+        const updates = { lastMessage: text, lastMessageLang: lang, updatedAt: serverTimestamp() };
         if (shouldIncrementUnread) updates.unreadCount = increment(1);
         await updateDoc(doc(db, "mockChats", chatId), updates);
       };
@@ -7968,6 +7990,7 @@
 
         const updates = {
           lastMessage: text,
+          lastMessageLang: lang || null,
           lastMessageSenderUid: myUid,
           updatedAt: serverTimestamp(),
           // 둘 중 누구든 대화를 지운 상태였더라도, 새 메시지가 오면 양쪽 목록에 다시 나타나야 한다.
