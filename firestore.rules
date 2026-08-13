@@ -1,0 +1,183 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // posts.likes/views/commentCount는 로그인만 하면 누구나 고칠 수 있는 카운터라(좋아요는
+    // 작성자가 아닌 다른 사람이 눌러야 하니 그 자체는 맞는 설계), 값 검증이 없으면 인증된
+    // 사용자가 API를 직접 호출해 값을 임의로 부풀리거나 깎을 수 있었다. 한 번의 update 호출이
+    // 바꿀 수 있는 변화폭을 실제 클라이언트 동작(좋아요 토글 ±1, 조회수 +1)만큼으로 제한한다.
+    // commentCount는 답글이 달린 댓글을 지울 때 한 번에 여러 개가 줄어들 수 있어(cascading
+    // delete) 감소 쪽만 폭을 열어둔다 — 어차피 감소는 표시 숫자만 줄이는 낮은 위험이고, 실제
+    // 댓글 생성/삭제 권한은 comments 서브컬렉션 규칙이 별도로 지킨다.
+    function isValidPostCounterUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['likes', 'views', 'commentCount'])
+        && (!changed.hasAny(['likes']) ||
+            request.resource.data.likes == resource.data.likes + 1 ||
+            request.resource.data.likes == resource.data.likes - 1)
+        && (!changed.hasAny(['views']) ||
+            request.resource.data.views == resource.data.views + 1)
+        && (!changed.hasAny(['commentCount']) ||
+            request.resource.data.commentCount == resource.data.commentCount + 1 ||
+            request.resource.data.commentCount < resource.data.commentCount);
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      // 회원 탈퇴: 본인 문서만 삭제 가능.
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+
+      // 새 글: 반드시 본인 uid로, 좋아요/조회수/댓글수가 0인 상태로만 생성 가능.
+      // (댓글 자체는 이제 이 문서 안이 아니라 아래 comments 서브컬렉션에 별도로 생성된다.)
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.likes == 0
+        && request.resource.data.views == 0
+        && request.resource.data.commentCount == 0;
+
+      // 수정 1) 좋아요/조회수/댓글수 갱신: 로그인만 하면 누구나
+      //         (commentCount는 댓글 서브컬렉션에 실제로 글을 쓸 수 있는 사람만 늘릴 수 있으므로,
+      //          여기서 로그인 여부만 확인해도 안전하다 - 아래 comments 서브컬렉션 규칙이 진짜 관문).
+      // 수정 2) 본문 수정(title/body/tags/categoryKey): 반드시 작성자 본인(authorUid 일치)만.
+      allow update: if request.auth != null && (
+        isValidPostCounterUpdate()
+        ||
+        (request.auth.uid == resource.data.authorUid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'body', 'tags', 'categoryKey']))
+      );
+
+      // 삭제: 작성자 본인만 가능.
+      allow delete: if request.auth != null && request.auth.uid == resource.data.authorUid;
+
+      match /comments/{commentId} {
+        // 댓글은 게시글 참여자 누구나 읽을 수 있다 (게시글 자체를 읽을 수 있으면 댓글도 볼 수 있어야 하므로).
+        allow read: if request.auth != null;
+
+        // 새 댓글/답글: 반드시 본인 uid로만 작성 가능.
+        allow create: if request.auth != null
+          && request.resource.data.authorUid == request.auth.uid;
+
+        // 수정: ① 댓글 작성자 본인이 text만 고치는 경우, ② 로그인한 사람 누구나 likes를 ±1만
+        //      바꾸는 경우(좋아요는 작성자가 아니어도 가능해야 해서 별도로 허용 — posts.likes와
+        //      동일한 이유로 변화폭을 클라이언트의 실제 토글 동작만큼으로 제한).
+        allow update: if request.auth != null && (
+          (request.auth.uid == resource.data.authorUid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text']))
+          ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+            && (request.resource.data.likes == resource.data.likes + 1
+                || request.resource.data.likes == resource.data.likes - 1))
+        );
+
+        // 삭제: 댓글 작성자 본인만.
+        allow delete: if request.auth != null && request.auth.uid == resource.data.authorUid;
+      }
+    }
+
+    match /chats/{chatId} {
+      // 대화 참여자 본인만 읽을 수 있음.
+      // resource == null 허용: __startOrGetChat이 새 대화를 만들기 전에 getDoc()으로 존재 여부부터
+      // 확인하는데, 문서가 아직 없으면 resource가 null이라 resource.data 접근 자체가 거부돼서
+      // "메시지를 시작할 수 없습니다" 에러로 이어지던 버그(mockChats에서 이미 겪었던 것과 동일한 패턴).
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.participants);
+
+      // 새 대화방: 참여자는 정확히 2명, 본인이 그중 한 명이어야 하고, 서로 차단한 사이가 아니어야 함.
+      allow create: if request.auth != null
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2
+        && !(request.resource.data.participants[0] in
+              get(/databases/$(database)/documents/users/$(request.resource.data.participants[1])).data.get('blockedUids', []))
+        && !(request.resource.data.participants[1] in
+              get(/databases/$(database)/documents/users/$(request.resource.data.participants[0])).data.get('blockedUids', []));
+
+      // 수정: 참여자 본인만, participants 배열 자체는 바꿀 수 없음(대화 상대를 바꿔치기 못하도록).
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.participants
+        && request.resource.data.participants == resource.data.participants;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // 메시지는 그 대화방 참여자만 읽고 쓸 수 있고, 보낸 사람은 반드시 본인이어야 함.
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+
+        allow create: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+          && request.resource.data.senderUid == request.auth.uid;
+
+        // 메시지 본문은 불변. 리액션(reactions) 필드만 대화 참여자 누구나 바꿀 수 있다(이모지 토글).
+        allow update: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']);
+
+        allow delete: if false;
+      }
+    }
+
+    match /mockChats/{mockChatId} {
+      // AI로 생성된 학생 카드와의 시뮬레이션 대화. 실제 유저가 아니라 상대편이 없으므로,
+      // 대화의 소유자(ownerUid) 본인만 읽고 쓸 수 있으면 충분하다 — 다른 유저는 절대 접근 불가.
+      // resource == null 허용: __fbStartMockChat이 새 대화를 만들기 전에 getDoc()으로 존재 여부부터
+      // 확인하는데, 문서가 아직 없으면 resource가 null이라 resource.data 접근 자체가 거부돼 버려서
+      // "지금은 연결할 수 없어요" 에러로 이어지던 버그. 없는 문서를 읽는 건 어차피 아무 정보도
+      // 안 새서(그냥 "없음"으로만 응답) 허용해도 안전하다.
+      allow read: if request.auth != null
+        && (resource == null || resource.data.ownerUid == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+
+      match /messages/{messageId} {
+        // 메시지 자체엔 ownerUid가 없으니, 부모 mockChats 문서의 ownerUid로 소유권을 확인한다.
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/mockChats/$(mockChatId)).data.ownerUid == request.auth.uid;
+      }
+    }
+
+    match /notifications/{notifId} {
+      // 다른 실제 유저가 나에게 Connect(대화 시작/프로젝트 참여 요청)를 보내면 만들어지는 알림.
+      // 받는 사람(recipientUid) 본인만 읽고, 보낸 사람(actorUid)은 본인 명의로만 새로 만들 수 있다.
+      allow read: if request.auth != null && resource.data.recipientUid == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.recipientUid != request.auth.uid
+        && request.resource.data.type == 'connect'
+        && request.resource.data.read == false
+        && request.resource.data.keys().hasOnly(
+             ['recipientUid', 'type', 'actorUid', 'actorName', 'actorUniversity', 'actorMajor', 'chatId', 'read', 'createdAt']
+           );
+
+      // 수정: 받는 사람 본인이 읽음 처리(read)만 할 수 있다.
+      allow update: if request.auth != null && resource.data.recipientUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+      // 삭제: 받는 사람 본인만.
+      allow delete: if request.auth != null && resource.data.recipientUid == request.auth.uid;
+    }
+
+    match /reports/{reportId} {
+      // 신고: 로그인한 사람이 "본인이 신고자"로만 생성 가능. 아직 운영자 화면이 없어서
+      // 읽기/수정/삭제는 전부 막아둔다 - Firebase Console에서 Firestore 데이터로 직접 확인해야 함.
+      allow create: if request.auth != null
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.type in ['post', 'comment']
+        && request.resource.data.reason is string;
+      allow read, update, delete: if false;
+    }
+
+    // 아직 정의되지 않은 다른 모든 컬렉션은 기본적으로 차단.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
