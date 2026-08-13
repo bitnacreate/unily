@@ -2859,7 +2859,11 @@
             '댓글을 삭제하시겠어요?',
             '링크가 복사되었습니다!',
             '프로필이 저장되었습니다!',
-            '로그인 후 학생을 저장할 수 있어요.'
+            '로그인 후 학생을 저장할 수 있어요.',
+            '로그인 후 좋아요를 누를 수 있어요.',
+            '로그인 후 게시글을 저장할 수 있어요.',
+            '로그인 후 Connect 요청을 보낼 수 있어요.',
+            '로그인 후 메시지를 보낼 수 있어요.'
         ];
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
@@ -3503,6 +3507,13 @@
         async function connectStudent(studentId) {
             const s = students.find(x => x.id === studentId);
             if (!s) return;
+            // 이전에는 로그인 안 된 상태로 눌러도 일단 시도한 뒤 Firestore가 던지는 "로그인이
+            // 필요합니다" 에러를 그냥 잡아서 "지금은 연결할 수 없어요"라는 애매한 문구로 덮어버렸다.
+            // 원인을 미리 알 수 있으니 아예 시도 전에 확인해서 정확한 안내를 보여준다.
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 Connect 요청을 보낼 수 있어요.', currentLang));
+                return;
+            }
             const chatId = mockChatIdFor(studentId);
 
             if ((window.__REAL_MOCK_CHATS || []).some(c => c.id === chatId)) {
@@ -4591,6 +4602,12 @@
         // 실제 게시글/댓글 작성자(authorUid)에게 메시지를 시작한다. 대화방이 이미 있으면 그대로 열고, 없으면 새로 만든다.
         async function startChatWithUser(otherUid, otherName) {
             if (!window.__startOrGetChat) return;
+            // Connect(실제 유저)/게시글·댓글 작성자에게 말 걸기가 전부 이 함수를 거치므로, connectStudent와
+            // 동일하게 로그인 여부를 먼저 확인해 정확한 안내를 보여준다.
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 메시지를 보낼 수 있어요.', currentLang));
+                return;
+            }
             try {
                 const chatId = await window.__startOrGetChat(otherUid, otherName);
                 showPage('messages');
@@ -5970,8 +5987,16 @@
             } catch (err) { return { posts: {}, comments: {} }; }
         }
         function setCommunityLikes(obj) { localStorage.setItem(COMMUNITY_LIKES_KEY, JSON.stringify(obj)); }
-        function isPostLiked(id) { return !!getCommunityLikes().posts[id]; }
-        function isCommentLiked(id) { return !!getCommunityLikes().comments[id]; }
+        // 좋아요 여부도 저장한 학생(isSaved)과 같은 이유로 로그인 상태가 아니면 항상 "좋아요 안 함"으로
+        // 취급한다 — localStorage 기록은 로그인 여부와 무관하게 남아있을 수 있기 때문.
+        function isPostLiked(id) {
+            if (!(window.__myUid && window.__myUid())) return false;
+            return !!getCommunityLikes().posts[id];
+        }
+        function isCommentLiked(id) {
+            if (!(window.__myUid && window.__myUid())) return false;
+            return !!getCommunityLikes().comments[id];
+        }
 
         /* ==================================================================
            SERVICE LAYER
@@ -6234,7 +6259,9 @@
                 localStorage.setItem('unily_community_saved', JSON.stringify(next));
                 return withDelay(next);
             }
+            // 저장 여부도 isSaved/isPostLiked와 동일한 이유로 로그인 상태가 아니면 항상 false.
             function isPostSaved(postId) {
+                if (!(window.__myUid && window.__myUid())) return false;
                 const ids = JSON.parse(localStorage.getItem('unily_community_saved') || '[]');
                 return ids.includes(postId);
             }
@@ -6529,7 +6556,11 @@
             observer.observe(sentinel);
         }
 
-        function toggleLikePost(postId) {
+        async function toggleLikePost(postId) {
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 좋아요를 누를 수 있어요.', currentLang));
+                return;
+            }
             const likes = getCommunityLikes();
             const wasLiked = !!likes.posts[postId];
             if (wasLiked) delete likes.posts[postId]; else likes.posts[postId] = true;
@@ -6538,7 +6569,11 @@
         }
         // 댓글 좋아요/원문토글/답글/삭제는 이제 게시글 상세 화면에서만 일어나므로
         // 항상 renderDetailComments()로 그 화면만 다시 그린다.
-        function toggleCommentLike(commentId, postId) {
+        async function toggleCommentLike(commentId, postId) {
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 좋아요를 누를 수 있어요.', currentLang));
+                return;
+            }
             const likes = getCommunityLikes();
             const wasLiked = !!likes.comments[commentId];
             if (wasLiked) delete likes.comments[commentId]; else likes.comments[commentId] = true;
@@ -6949,8 +6984,12 @@
             toggleLikePost(currentDetailPostId);
             renderPostDetail();
         }
-        function toggleSavePostDetail() {
+        async function toggleSavePostDetail() {
             if (!currentDetailPostId) return;
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 게시글을 저장할 수 있어요.', currentLang));
+                return;
+            }
             const nowSaved = !CommunityService.isPostSaved(currentDetailPostId);
             CommunityService.savePost(currentDetailPostId, nowSaved).then(() => renderPostDetail());
         }
