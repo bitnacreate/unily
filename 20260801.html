@@ -847,6 +847,30 @@
   .msg-empty-state-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
   .msg-empty-state-subtitle { font-size: 13.5px; color: var(--ink-soft); max-width: 260px; line-height: 1.5; }
 
+  /* 비로그인 상태로 메시지함에 들어왔을 때 보여주는 로그인 유도 게이트.
+     사이드바/채팅창을 완전히 대신해서 컨테이너 전체(양쪽 컬럼)를 차지한다 —
+     대화 목록이 잠깐이라도 노출되지 않도록 아예 다른 화면으로 대체하는 방식. */
+  .msg-login-gate {
+    grid-column: 1 / -1;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 24px;
+    background: #FAF8FF;
+  }
+  .msg-login-gate.active { display: flex; }
+  .msg-login-gate-icon {
+    width: clamp(46px,7vw,56px); aspect-ratio: 1/1; margin-bottom: 20px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--indigo), var(--mint));
+    display: flex; align-items: center; justify-content: center; font-size: clamp(20px,3.5vw,26px);
+  }
+  .msg-login-gate-title { font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .msg-login-gate-subtitle { font-size: 13.5px; color: var(--ink-soft); max-width: 300px; line-height: 1.6; margin-bottom: 26px; }
+  .msg-login-gate-btn { min-width: 180px; }
+
   .msg-chat-area {
     display: flex;
     flex-direction: column;
@@ -2048,6 +2072,15 @@
         </div>
 
         <div class="messages-container" id="msgContainer">
+            <!-- 비로그인 상태 게이트: updateMessagesAuthGate()가 로그인 여부에 따라 이 화면과
+                 아래 사이드바/채팅창 사이를 전환한다. 로그인 전에는 실제 대화 데이터가 담긴
+                 DOM(사이드바 목록/채팅창)이 아예 렌더링되지 않도록 display:none으로 걷어낸다. -->
+            <div class="msg-login-gate" id="msgLoginGate">
+                <div class="msg-login-gate-icon">🔒</div>
+                <div class="msg-login-gate-title" data-i18n="msg_login_gate_title">로그인이 필요해요</div>
+                <div class="msg-login-gate-subtitle" data-i18n="msg_login_gate_subtitle">전 세계 대학생들과 나눈 메시지를 보려면 먼저 로그인해주세요.</div>
+                <button type="button" class="btn-connect msg-login-gate-btn" onclick="showPage('mypage')" data-i18n="msg_login_gate_btn">로그인하러 가기</button>
+            </div>
             <!-- 왼쪽 대화 상대 목록 -->
             <div class="msg-sidebar">
                 <div class="msg-sidebar-header" data-i18n="msg_list_title">메시지 목록</div>
@@ -2569,6 +2602,9 @@
                 msg_page_desc: "전 세계 대학생들과 실시간으로 주고받은 대화 목록입니다. Instant 번역으로 편하게 대화해보세요.",
                 msg_list_title: "메시지 목록",
                 msg_send: "전송",
+                msg_login_gate_title: "로그인이 필요해요",
+                msg_login_gate_subtitle: "전 세계 대학생들과 나눈 메시지를 보려면 먼저 로그인해주세요.",
+                msg_login_gate_btn: "로그인하러 가기",
                 auth_google_only_title: "Unily에 오신 것을 환영해요",
                 auth_google_only_notice: "Unily는 현재 구글 로그인만 지원합니다.",
                 auth_consent_continue_btn: "동의하고 계속하기",
@@ -2691,6 +2727,9 @@
                 msg_page_desc: "Your direct messages with university students around the world. Enjoy seamless chat with Instant Translation.",
                 msg_list_title: "Messages",
                 msg_send: "Send",
+                msg_login_gate_title: "Sign in required",
+                msg_login_gate_subtitle: "Sign in to see your messages with students around the world.",
+                msg_login_gate_btn: "Go to sign in",
                 auth_google_only_title: "Welcome to Unily",
                 auth_google_only_notice: "Unily currently supports Google Sign-In only.",
                 auth_consent_continue_btn: "Agree & Continue",
@@ -3016,8 +3055,11 @@
                 currentChatId = null;
             }
             // 메시지 화면으로 들어오면 대화 목록 구독을 시작한다 (개별 채팅방 구독은 selectChat에서 시작).
-            if (pageId === 'messages' && window.__subscribeChatList) {
-                window.__subscribeChatList();
+            // 비로그인 상태면 subscribeChatList가 조용히 아무것도 하지 않으므로, 로그인 게이트를 보여줄지도
+            // 여기서 같이 판단한다.
+            if (pageId === 'messages') {
+                if (window.__subscribeChatList) window.__subscribeChatList();
+                if (typeof updateMessagesAuthGate === 'function') updateMessagesAuthGate();
             }
 
             // 게시글 상세 화면을 벗어나면 댓글 실시간 구독도 해제한다 (같은 상세 화면 안에서
@@ -4097,6 +4139,24 @@
         // chatId는 두 유저의 uid를 정렬해서 합친 값이라 항상 같은 두 사람은 같은 대화방을 씀.
         // 목록/채팅방 화면에 있을 때만 실시간 구독(onSnapshot)하고, 벗어나면 즉시 구독 해제한다(showPage 참고).
         let currentChatId = null;
+
+        // 비로그인 상태에서는 사이드바 목록/채팅창을 아예 걷어내고 로그인 게이트만 보여준다.
+        // 로그인 상태가 바뀔 수 있는 모든 지점(checkLoginState, 세션 복원 완료, 메시지함 진입)에서 호출한다.
+        function updateMessagesAuthGate() {
+            const gate = document.getElementById('msgLoginGate');
+            const sidebar = document.querySelector('#msgContainer .msg-sidebar');
+            const chatArea = document.querySelector('#msgContainer .msg-chat-area');
+            if (!gate || !sidebar || !chatArea) return;
+            const loggedIn = !!(window.__myUid && window.__myUid());
+            gate.classList.toggle('active', !loggedIn);
+            sidebar.style.display = loggedIn ? '' : 'none';
+            chatArea.style.display = loggedIn ? '' : 'none';
+            if (!loggedIn) {
+                // 로그인해서 채팅방을 열어둔 채로 로그아웃한 경우까지 대비해 열려있던 대화방 상태를 정리한다.
+                currentChatId = null;
+                document.getElementById('msgContainer')?.classList.remove('chat-open');
+            }
+        }
 
         // 메시지 목록/채팅방에 내역이 하나도 없을 때 보여주는 빈 상태 문구 (다국어)
         const MSG_EMPTY_TEXT = {
@@ -5544,6 +5604,7 @@
             const profileContainer = document.getElementById('profileContainer');
             const savedSection = document.getElementById('savedSection');
             refreshComposerAccess();
+            if (typeof updateMessagesAuthGate === 'function') updateMessagesAuthGate();
 
             if (AuthService.isLoggedIn()) {
                 authContainer.style.display = 'none';
@@ -5574,6 +5635,7 @@
         // 온보딩 위저드를 못 끝낸 사용자이므로 위저드를 띄워 마저 완료하게 한다.
         window.__onAuthStateResolved = function (needsOnboarding) {
             refreshComposerAccess();
+            if (typeof updateMessagesAuthGate === 'function') updateMessagesAuthGate();
             if (needsOnboarding && AuthService.isLoggedIn()) {
                 openOnboardingWithTermsGate();
             }
@@ -5592,6 +5654,7 @@
             render();
             renderMessagesList();
             renderChatArea({ forceScrollBottom: true });
+            updateMessagesAuthGate();
             checkLoginState();
             initGoogleSignIn(); // 구글 로그인 SDK 초기화 + 공식 버튼 렌더링
             initCommunity();
@@ -7283,6 +7346,13 @@
         } else {
           if (window.__unsubscribeMockChatList) window.__unsubscribeMockChatList();
           if (window.__unsubscribeNotifications) window.__unsubscribeNotifications();
+          // 실제 1:1 대화 목록/채팅방 구독도 여기서 반드시 같이 끊어야 한다 — 기존에는 메시지함
+          // 화면을 벗어날 때(showPage)만 해제됐어서, 마이페이지 등 다른 화면에서 로그아웃하면
+          // __CHATS에 이전 로그인 사용자의 대화 목록이 그대로 남아 있었다(로그아웃 상태에서
+          // 메시지함에 들어가면 그 목록이 그대로 보이는 버그의 원인).
+          if (window.__unsubscribeChatList) window.__unsubscribeChatList();
+          if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
+          if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
         }
       });
       const ai = getAI(app, { backend: new GoogleAIBackend() });
