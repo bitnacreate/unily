@@ -17,3 +17,20 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_UNILY_E973F }}
           channelId: live
           projectId: unily-e973f
+
+  # firestore.rules / firestore.indexes.json은 이제 git에 커밋되지만(예전엔 .gitignore에 걸려
+  # 로컬에만 존재했음), 이 저장소의 자동배포는 Hosting(정적 파일)만 다루므로 규칙/인덱스는
+  # 여전히 자동으로 배포되지 않는다. main에 rules 변경이 merge되면 여기서 같이 배포한다.
+  #
+  # 주의: FIREBASE_SERVICE_ACCOUNT_UNILY_E973F는 `firebase init hosting:github`이 만든
+  # 계정이라 기본적으로 Hosting 권한만 있을 수 있다. 이 job이 권한 오류로 실패하면, Google
+  # Cloud Console → IAM & 관리자에서 해당 서비스 계정에 "Firebase Rules 관리자"와
+  # "Cloud Datastore 색인 관리자"(또는 더 넓게 "Firebase 관리자") 역할을 추가해줘야 한다.
+  deploy_firestore_rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_UNILY_E973F }}
+      - run: npx firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project unily-e973f
