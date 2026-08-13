@@ -2858,7 +2858,8 @@
             '신고가 접수되었습니다. 검토 후 조치할게요.',
             '댓글을 삭제하시겠어요?',
             '링크가 복사되었습니다!',
-            '프로필이 저장되었습니다!'
+            '프로필이 저장되었습니다!',
+            '로그인 후 학생을 저장할 수 있어요.'
         ];
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
@@ -3910,12 +3911,20 @@
             }
         }
 
+        // 저장 여부는 localStorage에 로그인 여부와 무관하게 남아있을 수 있으므로(같은 기기를
+        // 다른 사람이 쓰거나, 로그아웃한 뒤에도 예전 기록이 지워지지 않으므로), 로그인 상태가
+        // 아니면 실제 저장 여부와 무관하게 항상 "저장 안 함"으로 보여준다.
         function isSaved(id) {
+            if (!(window.__myUid && window.__myUid())) return false;
             return getSavedStudentIds().includes(id);
         }
 
-        function toggleSaveStudent(id, event) {
+        async function toggleSaveStudent(id, event) {
             if (event) event.stopPropagation();
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 학생을 저장할 수 있어요.', currentLang));
+                return;
+            }
             let ids = getSavedStudentIds();
             ids = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id];
             localStorage.setItem(SAVED_STUDENTS_KEY, JSON.stringify(ids));
@@ -5605,6 +5614,10 @@
             const savedSection = document.getElementById('savedSection');
             refreshComposerAccess();
             if (typeof updateMessagesAuthGate === 'function') updateMessagesAuthGate();
+            // 탐색 그리드의 하트(♥) 표시는 isSaved()가 로그인 여부를 직접 참조하므로, 로그인
+            // 상태가 바뀔 때마다 그리드를 다시 그려야 즉시 반영된다 — 안 그러면 로그인해서 저장한
+            // 학생 카드가 로그아웃 후에도 이미 그려진 DOM에 하트가 채워진 채로 남아있게 된다.
+            if (typeof render === 'function') render();
 
             if (AuthService.isLoggedIn()) {
                 authContainer.style.display = 'none';
@@ -5646,6 +5659,9 @@
             // 다시 그려서 바로잡는다.
             if (typeof renderMessagesList === 'function') renderMessagesList();
             if (typeof renderChatArea === 'function') renderChatArea();
+            // 탐색 카드의 하트(♥)도 isSaved()가 window.__myUid()를 참조하므로 같은 이유로 다시 그려야
+            // 세션 복원이 늦게 끝나도 로그인된 사용자의 저장 표시가 정확히 반영된다.
+            if (typeof render === 'function') render();
         };
 
         // 초기화 함수
