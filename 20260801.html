@@ -952,11 +952,7 @@
     font-size: 13px; color: var(--ink); line-height: 1.6; margin: 0 0 14px;
     padding-top: 12px; border-top: 1px solid var(--line);
   }
-  /* "Shared Context" 한 줄 — 과하지 않은 옅은 톤의 중앙 정렬 미니 배지. */
-  .chat-profile-banner-shared {
-    display: inline-block; margin: 0 auto 16px; background: var(--bg-alt); color: var(--ink-soft);
-    font-size: 12.5px; font-weight: 500; padding: 5px 14px; border-radius: 100px;
-  }
+  .chat-profile-banner .shared-dream-badge { margin-bottom: 16px; }
   .chat-profile-banner-btn { width: 100%; }
 
   .msg-chat-body {
@@ -4825,13 +4821,14 @@
                 ? `<div class="chat-profile-banner-country">${escapeHTML(countryBadgeText(card.country))}</div>` : '';
             const uniLine = [card.university, card.major ? t(card.major) : ''].filter(Boolean).join(' · ');
             // 공통점 요약: Dream Exchange 희망 국가가 겹치면 그 내용으로, 아니면 기본 문구로.
-            // sharedDreamBadgeHTML()의 초록색 배지(학생 카드용)와는 다른, 이 배너 전용의 옅은
-            // 미니 배지 스타일(.chat-profile-banner-shared)로 통일해서 보여준다.
+            // 학생 카드의 "공통 희망국가" 배지(sharedDreamBadgeHTML)와 동일한 초록 배지 스타일을
+            // 그대로 재사용한다.
             const sharedCountries = sharedDreamCountries(card);
+            const sharedIcon = sharedCountries.length > 0 ? '🌍' : '🎓';
             const sharedText = sharedCountries.length > 0
                 ? t('You both want to study in {country}').replace('{country}', countryName(sharedCountries[0]))
                 : t('Unily로 연결된 사이예요');
-            const sharedHTML = `<div class="chat-profile-banner-shared">${escapeHTML(sharedText)}</div>`;
+            const sharedHTML = `<div class="shared-dream-badge">${sharedIcon} ${escapeHTML(sharedText)}</div>`;
             return `
               <div class="chat-profile-banner">
                 <div class="chat-profile-banner-avatar" style="background:${card.badgeGradient || ''}">${initialsOf(card.name)}</div>
