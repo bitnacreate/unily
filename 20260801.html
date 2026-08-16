@@ -2895,7 +2895,9 @@
             '로그인 후 좋아요를 누를 수 있어요.',
             '로그인 후 게시글을 저장할 수 있어요.',
             '로그인 후 Connect 요청을 보낼 수 있어요.',
-            '로그인 후 메시지를 보낼 수 있어요.'
+            '로그인 후 메시지를 보낼 수 있어요.',
+            '로그인 후 프로젝트 참여를 요청할 수 있어요.',
+            '나중에 다시 확인하실 수 있어요.'
         ];
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
@@ -3097,13 +3099,17 @@
                 if (window.__unsubscribeChatList) window.__unsubscribeChatList();
                 if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
                 if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
+                if (window.__unsubscribeMyChannels) window.__unsubscribeMyChannels();
+                if (window.__unsubscribeChannelMessages) window.__unsubscribeChannelMessages();
                 currentChatId = null;
+                currentChannelId = null;
             }
-            // 메시지 화면으로 들어오면 대화 목록 구독을 시작한다 (개별 채팅방 구독은 selectChat에서 시작).
-            // 비로그인 상태면 subscribeChatList가 조용히 아무것도 하지 않으므로, 로그인 게이트를 보여줄지도
-            // 여기서 같이 판단한다.
+            // 메시지 화면으로 들어오면 대화 목록/채널 목록 구독을 시작한다 (개별 채팅방·채널 메시지
+            // 구독은 selectChat/selectChannel에서 시작). 비로그인 상태면 subscribeChatList가 조용히
+            // 아무것도 하지 않으므로, 로그인 게이트를 보여줄지도 여기서 같이 판단한다.
             if (pageId === 'messages') {
                 if (window.__subscribeChatList) window.__subscribeChatList();
+                if (window.__subscribeMyChannels) window.__subscribeMyChannels();
                 if (typeof updateMessagesAuthGate === 'function') updateMessagesAuthGate();
             }
 
@@ -3426,7 +3432,7 @@
                 ? `<span class="project-meta-pill">⏳ ${projectDeadlineText(p.deadlineDays)}</span>` : '';
             const metaRow = spotsPill || deadlinePill ? `<div class="project-recruit-meta-row">${spotsPill}${deadlinePill}</div>` : '';
             const connectBtn = opts.preview ? '' :
-                `<button class="btn-connect" style="width:100%; margin-top:10px;" onclick="event.stopPropagation(); connectWithRealStudent('${s.uid}')">${projectUIText('btn_join')}</button>`;
+                `<button class="btn-connect" style="width:100%; margin-top:10px;" onclick="event.stopPropagation(); requestProjectJoin('${s.uid}', ${JSON.stringify(s.name)}, ${JSON.stringify(p.title)})">${projectUIText('btn_join')}</button>`;
             return `
           <div class="project-recruit-box">
             <div class="project-recruit-label">${icon} ${labelText}</div>
@@ -3455,6 +3461,24 @@
             } catch (err) {
                 console.error('Connect 요청 실패:', err);
                 alert(await translateText('메시지를 시작할 수 없습니다.', currentLang));
+            }
+        }
+
+        // "프로젝트 참여하기" 버튼(실제 유저 카드): __fbRequestProjectJoin으로 프로젝트 소유자에게
+        // "대기(pending)" 상태의 참여 요청을 보낸다. 수락되면 소유자 쪽에서 프로젝트 채널이 만들어진다.
+        async function requestProjectJoin(ownerUid, ownerName, projectTitle) {
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 프로젝트 참여를 요청할 수 있어요.', currentLang));
+                return;
+            }
+            if (!window.__fbRequestProjectJoin) return;
+            try {
+                const chatId = await window.__fbRequestProjectJoin(ownerUid, ownerName, projectTitle);
+                showPage('messages');
+                selectChat(chatId);
+            } catch (err) {
+                console.error('프로젝트 참여 요청 실패:', err);
+                alert(await translateText('요청을 보낼 수 없습니다.', currentLang));
             }
         }
 
@@ -4232,6 +4256,9 @@
         // chatId는 두 유저의 uid를 정렬해서 합친 값이라 항상 같은 두 사람은 같은 대화방을 씀.
         // 목록/채팅방 화면에 있을 때만 실시간 구독(onSnapshot)하고, 벗어나면 즉시 구독 해제한다(showPage 참고).
         let currentChatId = null;
+        // 프로젝트 채널을 보고 있을 때만 값이 들어간다. currentChatId/currentChannelId 둘 중
+        // 하나만 항상 값을 가지도록 selectChat/selectChannel이 서로를 null로 비워준다.
+        let currentChannelId = null;
 
         // 비로그인 상태에서는 사이드바 목록/채팅창을 아예 걷어내고 로그인 게이트만 보여준다.
         // 로그인 상태가 바뀔 수 있는 모든 지점(checkLoginState, 세션 복원 완료, 메시지함 진입)에서 호출한다.
@@ -4389,6 +4416,7 @@
 
         function selectChat(chatId) {
             currentChatId = chatId;
+            currentChannelId = null;
             const item = getAllChatsCombined().find(c => c.id === chatId);
             cancelReply();
             openReactionPickerId = null;
@@ -4410,9 +4438,10 @@
             document.getElementById('msgHeaderActions').style.display = item ? 'block' : 'none';
 
             renderMessagesList();
-            // 어느 쪽이었든 이전 채팅방 구독은 확실히 끊고, 새로 고른 채팅방 종류에 맞는 구독을 시작한다.
+            // 어느 쪽이었든 이전 채팅방/채널 구독은 확실히 끊고, 새로 고른 채팅방 종류에 맞는 구독을 시작한다.
             if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
             if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
+            if (window.__unsubscribeChannelMessages) window.__unsubscribeChannelMessages();
             if (isMockChatId(chatId)) {
                 if (window.__subscribeMockChatMessages) window.__subscribeMockChatMessages(chatId);
                 if (window.__fbMarkMockChatRead) window.__fbMarkMockChatRead(chatId);
@@ -4420,6 +4449,41 @@
                 window.__subscribeChatMessages(chatId);
             }
             renderChatArea({ forceScrollBottom: true });
+        }
+
+        // 프로젝트 채널(다인 그룹 채팅방)을 연다 — Request Card의 "채널로 이동하기" 버튼에서 호출.
+        // 채널 목록/탭 UI는 다음 단계에서 추가되고, 지금은 이 함수로 직접 진입하는 경로만 있다.
+        function selectChannel(channelId) {
+            currentChannelId = channelId;
+            currentChatId = null;
+            cancelReply();
+            openReactionPickerId = null;
+            const moreMenu = document.getElementById('chatMoreMenu');
+            if (moreMenu) moreMenu.style.display = 'none';
+
+            if (window.innerWidth <= 960) {
+                document.getElementById('msgContainer').classList.add('chat-open');
+                document.getElementById('backToMsgList').style.display = 'block';
+            }
+
+            const channel = (window.__PROJECT_CHANNELS || []).find(c => c.id === channelId);
+            document.getElementById('activeAvatar').innerText = '#';
+            document.getElementById('activeAvatar').style.background = '';
+            document.getElementById('activeName').innerText = channel ? channel.title : '';
+            document.getElementById('activeUni').innerText = channel ? `${(channel.memberUids || []).length}명 참여 중` : '';
+            document.getElementById('activeLocalTime').style.display = 'none';
+            document.getElementById('msgHeaderActions').style.display = 'none';
+
+            if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
+            if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
+            if (window.__subscribeChannelMessages) window.__subscribeChannelMessages(channelId);
+            renderChatArea({ forceScrollBottom: true });
+        }
+
+        // Request Card의 "채널로 이동하기" — 메시지함으로 이동해 바로 그 채널을 연다.
+        function goToProjectChannel(channelId) {
+            showPage('messages');
+            selectChannel(channelId);
         }
 
         function closeMobileChat() {
@@ -4528,12 +4592,35 @@
             window.__toggleReaction(currentChatId, messageId, emoji).catch(err => console.error('리액션 실패:', err));
         }
 
-        /* ---------- CONNECT 요청 카드 (대화방 status가 pending/declined일 때 채팅창 맨 위에 표시) ----------
-           status가 없거나(레거시 대화방) 'accepted'인 일반 대화는 이 함수를 호출하는 쪽(renderChatArea)에서
-           애초에 걸러내므로, 여기서는 pending/declined/방금 수락된 connect만 다룬다. */
+        /* ---------- 요청 카드 (대화방 status가 pending/declined/방금 accepted일 때 채팅창 맨 위에 표시) ----------
+           status가 없거나(레거시 대화방) 이미 예전부터 'accepted'였던 일반 대화는 이 함수를 호출하는
+           쪽(renderChatArea)에서 애초에 걸러내므로, 여기서는 pending/declined/방금 수락됨만 다룬다.
+           requestType으로 Connect 카드와 Project(팀 합류) 카드 문구를 구분한다. */
         function renderRequestCardHTML(chat, myUid) {
             const isRecipient = chat.requestedBy !== myUid;
+            const isProject = chat.requestType === 'project';
+
             if (chat.status === 'pending') {
+                if (isProject) {
+                    if (isRecipient) {
+                        return `
+                          <div class="request-card">
+                            <div class="request-card-header">Project Join Request</div>
+                            <div class="request-card-main">${escapeHTML(chat.otherName || '')}님이 [${escapeHTML(chat.projectTitle || '')}] 팀 합류를 희망합니다.</div>
+                            <div class="request-card-sub">요청을 수락하면 프로젝트 전용 채널 및 워크스페이스 권한이 부여됩니다.</div>
+                            <div class="request-card-actions">
+                              <button type="button" class="btn-connect" onclick="respondToProjectRequest('${chat.id}', 'accepted')">팀원으로 수락</button>
+                              <button type="button" class="btn-reset" onclick="respondToProjectRequest('${chat.id}', 'later')">나중에 보기</button>
+                            </div>
+                          </div>`;
+                    }
+                    return `
+                      <div class="request-card">
+                        <div class="request-card-header">Project Join Request</div>
+                        <div class="request-card-main">[${escapeHTML(chat.projectTitle || '')}] 팀에 참여 요청을 보냈습니다.</div>
+                        <div class="request-card-status">${escapeHTML(chat.otherName || '')}님의 수락을 기다리는 중이에요.</div>
+                      </div>`;
+                }
                 if (isRecipient) {
                     return `
                       <div class="request-card">
@@ -4556,14 +4643,27 @@
             if (chat.status === 'declined') {
                 return `
                   <div class="request-card">
-                    <div class="request-card-header">Connection Request</div>
+                    <div class="request-card-header">${isProject ? 'Project Join Request' : 'Connection Request'}</div>
                     <div class="request-card-status">요청을 거절했습니다.</div>
                   </div>`;
             }
-            // status === 'accepted' && requestType === 'connect': 정식 요청을 거쳐 막 연결된
-            // 대화라는 걸 알려주는 작은 확인 문구. 레거시 대화(requestType 없음)에는 뜨지 않는다.
+            // status === 'accepted': 정식 요청을 거쳐 막 연결/합류됐다는 걸 알려주는 작은 확인 문구.
+            // requestType이 없는(레거시) 대화에는 뜨지 않는다.
             if (chat.status === 'accepted' && chat.requestType === 'connect') {
                 return `<div class="request-card request-card-compact"><div class="request-card-status">커넥션이 연결되었습니다</div></div>`;
+            }
+            if (chat.status === 'accepted' && isProject) {
+                const mainText = isRecipient
+                    ? `${escapeHTML(chat.otherName || '')}님이 팀에 합류했습니다`
+                    : `[${escapeHTML(chat.projectTitle || '')}] 팀에 합류했습니다`;
+                const channelBtn = chat.projectChannelId
+                    ? `<button type="button" class="btn-connect" style="margin-top:10px; width:100%;" onclick="goToProjectChannel('${chat.projectChannelId}')">채널로 이동하기</button>`
+                    : '';
+                return `
+                  <div class="request-card request-card-compact">
+                    <div class="request-card-status">${mainText}</div>
+                    ${channelBtn}
+                  </div>`;
             }
             return '';
         }
@@ -4572,6 +4672,25 @@
             if (!window.__fbRespondToConnectRequest) return;
             try {
                 await window.__fbRespondToConnectRequest(chatId, decision);
+            } catch (err) {
+                console.error('요청 응답 실패:', err);
+                showToast(await translateText('처리에 실패했어요. 다시 시도해주세요.', currentLang), 'error');
+                return;
+            }
+            renderChatArea();
+            renderMessagesList();
+        }
+
+        // "나중에 보기"는 아무 것도 저장하지 않는다 — 요청은 그대로 pending으로 남아서, 다음에
+        // 이 대화방을 다시 열면 똑같은 카드가 또 뜬다(수락/거절만 서버에 실제로 반영됨).
+        async function respondToProjectRequest(chatId, decision) {
+            if (decision === 'later') {
+                showToast(await translateText('나중에 다시 확인하실 수 있어요.', currentLang));
+                return;
+            }
+            if (!window.__fbRespondToProjectRequest) return;
+            try {
+                await window.__fbRespondToProjectRequest(chatId, decision);
             } catch (err) {
                 console.error('요청 응답 실패:', err);
                 showToast(await translateText('처리에 실패했어요. 다시 시도해주세요.', currentLang), 'error');
@@ -4601,10 +4720,18 @@
 
         // 채팅창 스크롤: 사용자가 이미 맨 아래 근처에 있을 때만(또는 명시적으로 요청했을 때만)
         // 새로 렌더링한 뒤 맨 아래로 내린다. 과거 메시지를 읽고 있을 때는 스크롤 위치를 그대로 유지한다.
+        // 채널 멤버의 uid로 표시 이름을 찾는다 — 실제 유저 디렉터리(__REAL_STUDENTS)에 없으면
+        // (아직 목록이 안 실렸거나 탈퇴 등) "Member"로 대체한다.
+        function channelMemberName(uid) {
+            const u = (window.__REAL_STUDENTS || []).find(x => x.uid === uid);
+            return (u && u.name) || 'Member';
+        }
+
         function renderChatArea(opts) {
             opts = opts || {};
             const chatBody = document.getElementById('chatBody');
-            if (!currentChatId) {
+            const isChannel = !!currentChannelId;
+            if (!currentChatId && !currentChannelId) {
                 // 아직 아무 대화방도 선택 안 한 상태. 헤더 전체(빈 프로필 사진 자리 포함)를 숨기고
                 // 빈 상태 문구만 깔끔하게 채팅 영역 전체를 채우도록 한다.
                 document.getElementById('chatHeader').style.display = 'none';
@@ -4613,10 +4740,12 @@
                 return;
             }
             document.getElementById('chatHeader').style.display = 'flex';
-            const messages = isMockChatId(currentChatId) ? (window.__ACTIVE_MOCK_MESSAGES || []) : (window.__ACTIVE_MESSAGES || []);
+            const messages = isChannel ? (window.__ACTIVE_CHANNEL_MESSAGES || [])
+                : isMockChatId(currentChatId) ? (window.__ACTIVE_MOCK_MESSAGES || []) : (window.__ACTIVE_MESSAGES || []);
             const myUid = window.__myUid ? window.__myUid() : null;
-            const chatInfo = getAllChatsCombined().find(c => c.id === currentChatId);
+            const chatInfo = isChannel ? null : getAllChatsCombined().find(c => c.id === currentChatId);
             // chatInfo.status가 없는(레거시) 대화는 항상 "열려있는" 대화로 취급 — 카드도 안 뜨고 입력창도 항상 활성.
+            // 채널은 요청 카드 개념이 아예 없다(수락된 순간에만 생기고, 멤버만 애초에 들어올 수 있음).
             const requestCardHTML = chatInfo ? renderRequestCardHTML(chatInfo, myUid) : '';
             updateChatInputGate(chatInfo, myUid);
 
@@ -4655,8 +4784,9 @@
                 const isOut = m.senderUid === myUid;
                 const grouped = m.senderUid === lastSenderUid && (m.createdAt - lastMsgTime) < GROUP_WINDOW_MS;
 
+                const avatarName = isChannel ? channelMemberName(m.senderUid) : (chatInfo ? chatInfo.otherName : '');
                 const avatarHtml = !isOut
-                    ? `<div class="chat-group-avatar${!grouped ? ' show' : ''}">${initialsOf(chatInfo ? chatInfo.otherName : '')}</div>`
+                    ? `<div class="chat-group-avatar${!grouped ? ' show' : ''}">${initialsOf(avatarName)}</div>`
                     : '';
 
                 const replyHtml = m.replyTo
@@ -4729,7 +4859,7 @@
         async function sendChatMessage() {
             const input = document.getElementById('msgInput');
             const text = input.value.trim();
-            if (!text || !currentChatId || input.disabled) return;
+            if (!text || (!currentChatId && !currentChannelId) || input.disabled) return;
 
             const replyTo = replyingToMessage
                 ? { messageId: replyingToMessage.id, text: replyingToMessage.text, senderUid: replyingToMessage.senderUid }
@@ -4738,6 +4868,15 @@
             input.value = '';
             cancelReply();
 
+            if (currentChannelId) {
+                if (!window.__sendChannelMessage) return;
+                try {
+                    await window.__sendChannelMessage(currentChannelId, text, replyTo, currentLang);
+                } catch (err) {
+                    console.error('채널 메시지 전송 실패:', err);
+                }
+                return;
+            }
             if (isMockChatId(currentChatId)) {
                 sendMockChatMessage(currentChatId, text, replyTo);
                 return;
@@ -7545,11 +7684,25 @@
                 }
             }
         };
-        // 현재 열려있는 채팅방의 메시지가 바뀔 때(module 스크립트의 onSnapshot에서 호출)
+        // 현재 열려있는 채팅방/채널의 메시지가 바뀔 때(module 스크립트의 onSnapshot에서 호출).
+        // __subscribeChannelMessages도 이 콜백을 그대로 재사용한다.
         window.__onActiveMessagesChange = function () {
-            if (isMessagesPageActive() && currentChatId) {
+            if (isMessagesPageActive() && (currentChatId || currentChannelId)) {
                 try { renderChatArea(); } catch (err) { console.error(err); }
             }
+        };
+
+        // 내 프로젝트 채널 목록이 바뀔 때(멤버 추가/제목 변경 등). 지금 보고 있는 채널의 헤더
+        // 정보(제목/인원수)만 갱신한다 — selectChannel을 다시 부르면 메시지 구독까지 매번 끊었다
+        // 다시 맺어서 낭비이므로, 헤더 텍스트만 가볍게 다시 그린다. 채널 목록 UI 자체는 다음 단계.
+        window.__onChannelsChange = function () {
+            if (!isMessagesPageActive() || !currentChannelId) return;
+            const channel = (window.__PROJECT_CHANNELS || []).find(c => c.id === currentChannelId);
+            if (!channel) return;
+            try {
+                document.getElementById('activeName').innerText = channel.title;
+                document.getElementById('activeUni').innerText = `${(channel.memberUids || []).length}명 참여 중`;
+            } catch (err) { console.error(err); }
         };
 
         // AI 학생과의 대화 목록(mockChats)이 바뀔 때. 실제 대화와 합쳐서 보여줘야 하니 메시지함 목록도
@@ -7613,6 +7766,7 @@
         arrayUnion,
         arrayRemove,
         increment,
+        runTransaction,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
       import {
         getAI,
@@ -7689,6 +7843,7 @@
         // 대화 목록 구독이 조용히 실패한 채로 남아있지 않도록 다시 시도한다.
         const messagesPageActive = document.getElementById("page-messages")?.classList.contains("active");
         if (messagesPageActive && window.__subscribeChatList) window.__subscribeChatList();
+        if (messagesPageActive && window.__subscribeMyChannels) window.__subscribeMyChannels();
 
         // AI 학생과의 대화(mockChats) 목록 및 알림도 헤더 배지가 페이지와 무관하게 항상 정확해야
         // 하므로, 실제 대화 목록과 달리 로그인해 있는 동안은 항상 구독해둔다(로그아웃하면 해제).
@@ -7705,6 +7860,8 @@
           if (window.__unsubscribeChatList) window.__unsubscribeChatList();
           if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
           if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
+          if (window.__unsubscribeMyChannels) window.__unsubscribeMyChannels();
+          if (window.__unsubscribeChannelMessages) window.__unsubscribeChannelMessages();
         }
       });
       const ai = getAI(app, { backend: new GoogleAIBackend() });
@@ -8155,11 +8312,15 @@
                 pinned: (data.pinnedBy || []).includes(myUid),
                 otherLastReadAt: toMillis(lastReadMap[otherUid]),
                 deletedForMe: (data.deletedFor || []).includes(myUid),
-                // Connect 요청 카드 렌더링에 필요한 필드들. status가 없는(레거시) 대화방은
+                // 요청 카드 렌더링에 필요한 필드들. status가 없는(레거시) 대화방은
                 // undefined로 남아 "항상 열려있는 대화"로 취급된다(renderChatArea 참고).
                 status: data.status || null,
                 requestedBy: data.requestedBy || null,
                 requestType: data.requestType || null,
+                // requestType === 'project'일 때만 의미 있는 필드들.
+                projectOwnerUid: data.projectOwnerUid || null,
+                projectTitle: data.projectTitle || null,
+                projectChannelId: data.projectChannelId || null,
               };
             })
             .filter((c) => !c.deletedForMe && !myBlocked.includes(c.otherUid));
@@ -8403,6 +8564,152 @@
       window.__fbRespondToConnectRequest = async function (chatId, decision) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
         await updateDoc(doc(db, "chats", chatId), { status: decision });
+      };
+
+      // "프로젝트 참여하기" 버튼 — __fbSendConnectRequest와 거의 동일하지만, 프로젝트 소유자에게
+      // 어떤 프로젝트에 참여하고 싶은지 알 수 있도록 requestType/projectOwnerUid/projectTitle을
+      // 추가로 남긴다. 수락되기 전까진 여전히 평범한 1:1 대화(chats)일 뿐이고, 수락되는 순간에만
+      // 별도의 projectChannels 문서가 생긴다(아래 __fbRespondToProjectRequest 참고).
+      window.__fbRequestProjectJoin = async function (ownerUid, ownerName, projectTitle) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        const myUid = auth.currentUser.uid;
+        if (myUid === ownerUid) throw new Error("자기 자신에게는 참여 요청을 보낼 수 없습니다.");
+        if ((window.__myBlockedUids || []).includes(ownerUid)) throw new Error("차단한 사용자입니다.");
+        const chatId = chatIdFor(myUid, ownerUid);
+        const ref = doc(db, "chats", chatId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            participants: [myUid, ownerUid].sort(),
+            participantInfo: {
+              [myUid]: { name: auth.currentUser.displayName || "" },
+              [ownerUid]: { name: ownerName || "" },
+            },
+            lastMessage: "",
+            updatedAt: serverTimestamp(),
+            unreadCount: { [myUid]: 0, [ownerUid]: 0 },
+            pinnedBy: [],
+            deletedFor: [],
+            status: "pending",
+            requestedBy: myUid,
+            requestType: "project",
+            projectOwnerUid: ownerUid,
+            projectTitle: projectTitle || "",
+          });
+          createConnectNotification(myUid, ownerUid, chatId).catch((err) =>
+            console.error("프로젝트 참여 요청 알림 생성 실패:", err)
+          );
+        } else if ((snap.data().deletedFor || []).includes(myUid)) {
+          await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
+        }
+        return chatId;
+      };
+
+      // 프로젝트 참여 요청의 수락/거절. 'declined'는 Connect와 동일하게 status만 바꾸면 끝이지만,
+      // 'accepted'는 프로젝트 채널(projectChannels/{ownerUid})을 새로 만들거나 멤버를 추가해야 하므로
+      // 트랜잭션으로 묶는다 — 채널 생성/합류와 채팅방 status 갱신이 항상 함께 성공/실패하게 하기 위함.
+      // "나중에 보기"는 이 함수를 아예 호출하지 않는다(클라이언트에서 그냥 아무것도 안 함).
+      window.__fbRespondToProjectRequest = async function (chatId, decision) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        if (decision === "declined") {
+          await updateDoc(doc(db, "chats", chatId), { status: "declined" });
+          return;
+        }
+        const myUid = auth.currentUser.uid; // 수락 버튼을 누른 사람 = 프로젝트 소유자여야 함(카드도 그렇게만 보여줌)
+        await runTransaction(db, async (tx) => {
+          const chatRef = doc(db, "chats", chatId);
+          const chatSnap = await tx.get(chatRef);
+          if (!chatSnap.exists()) throw new Error("대화방을 찾을 수 없습니다.");
+          const chatData = chatSnap.data();
+          if (chatData.projectOwnerUid !== myUid) throw new Error("프로젝트 소유자만 수락할 수 있습니다.");
+          const requesterUid = chatData.requestedBy;
+          const channelId = myUid;
+          const channelRef = doc(db, "projectChannels", channelId);
+          const channelSnap = await tx.get(channelRef);
+          if (!channelSnap.exists()) {
+            tx.set(channelRef, {
+              ownerUid: myUid,
+              title: chatData.projectTitle || "",
+              memberUids: [myUid, requesterUid],
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          } else if (!(channelSnap.data().memberUids || []).includes(requesterUid)) {
+            tx.update(channelRef, { memberUids: arrayUnion(requesterUid), updatedAt: serverTimestamp() });
+          }
+          tx.update(chatRef, { status: "accepted", projectChannelId: channelId });
+        });
+      };
+
+      /* ==================================================================
+         프로젝트 채널(projectChannels/{channelId}) — 프로젝트 참여 요청이 수락된 뒤에만 생기는
+         다인 그룹 채팅방. 지금은 요청 카드의 "채널로 이동하기"로만 진입 가능(채널 목록/탭 UI는
+         다음 단계). 채팅방(chats)과 동일한 구독→전역변수→렌더 훅 패턴을 그대로 따른다.
+         ================================================================== */
+      window.__PROJECT_CHANNELS = [];
+      let unsubMyChannels = null;
+      window.__subscribeMyChannels = function () {
+        if (unsubMyChannels || !auth.currentUser) return;
+        const myUid = auth.currentUser.uid;
+        const qy = query(collection(db, "projectChannels"), where("memberUids", "array-contains", myUid));
+        unsubMyChannels = onSnapshot(qy, (snap) => {
+          window.__PROJECT_CHANNELS = snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ownerUid: data.ownerUid,
+              title: data.title || "",
+              memberUids: data.memberUids || [],
+              lastMessage: data.lastMessage || "",
+              updatedAt: toMillis(data.updatedAt),
+            };
+          });
+          if (typeof window.__onChannelsChange === "function") window.__onChannelsChange();
+        });
+      };
+      window.__unsubscribeMyChannels = function () {
+        if (unsubMyChannels) { unsubMyChannels(); unsubMyChannels = null; }
+        window.__PROJECT_CHANNELS = [];
+      };
+
+      window.__ACTIVE_CHANNEL_MESSAGES = [];
+      let unsubChannelMessages = null;
+      window.__subscribeChannelMessages = function (channelId) {
+        window.__unsubscribeChannelMessages();
+        const messagesCol = collection(db, "projectChannels", channelId, "messages");
+        const qy = query(messagesCol, orderBy("createdAt", "asc"));
+        unsubChannelMessages = onSnapshot(qy, (snap) => {
+          window.__ACTIVE_CHANNEL_MESSAGES = snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              senderUid: data.senderUid,
+              text: data.text,
+              createdAt: toMillis(data.createdAt),
+              replyTo: data.replyTo || null,
+              reactions: data.reactions || {},
+              lang: data.lang || null,
+            };
+          });
+          if (typeof window.__onActiveMessagesChange === "function") window.__onActiveMessagesChange();
+        });
+      };
+      window.__unsubscribeChannelMessages = function () {
+        if (unsubChannelMessages) { unsubChannelMessages(); unsubChannelMessages = null; }
+        window.__ACTIVE_CHANNEL_MESSAGES = [];
+      };
+
+      window.__sendChannelMessage = async function (channelId, text, replyTo, lang) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        const myUid = auth.currentUser.uid;
+        const messageData = { senderUid: myUid, text, createdAt: serverTimestamp(), reactions: {} };
+        if (replyTo) messageData.replyTo = replyTo;
+        if (lang) messageData.lang = lang;
+        await addDoc(collection(db, "projectChannels", channelId, "messages"), messageData);
+        await updateDoc(doc(db, "projectChannels", channelId), {
+          lastMessage: text,
+          updatedAt: serverTimestamp(),
+        }).catch(() => {});
       };
 
       /* ==================================================================

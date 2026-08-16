@@ -143,6 +143,41 @@ service cloud.firestore {
       }
     }
 
+    match /projectChannels/{channelId} {
+      // 프로젝트 참여 요청이 수락됐을 때만 생기는 다인 그룹 채널. channelId는 프로젝트 소유자의
+      // uid를 그대로 쓴다(지금 데이터 모델상 한 유저가 동시에 하나의 모집 프로젝트만 가지므로).
+      allow read: if request.auth != null && request.auth.uid in resource.data.memberUids;
+
+      // 생성은 오직 소유자 본인만, 처음엔 소유자+새로 수락된 멤버 정확히 2명으로 시작.
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.ownerUid
+        && request.resource.data.memberUids.size() == 2
+        && request.auth.uid in request.resource.data.memberUids;
+
+      // memberUids 변경은 오직 소유자만, 정확히 1명씩만 추가 가능(기존 멤버는 그대로 유지 — 아무도 빠지지 않음).
+      allow update: if request.auth != null && request.auth.uid == resource.data.ownerUid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+        && resource.data.memberUids.removeAll(request.resource.data.memberUids).size() == 0;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/projectChannels/$(channelId)).data.memberUids;
+
+        allow create: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/projectChannels/$(channelId)).data.memberUids
+          && request.resource.data.senderUid == request.auth.uid;
+
+        allow update: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/projectChannels/$(channelId)).data.memberUids
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']);
+
+        allow delete: if false;
+      }
+    }
+
     match /mockChats/{mockChatId} {
       // AI로 생성된 학생 카드와의 시뮬레이션 대화. 실제 유저가 아니라 상대편이 없으므로,
       // 대화의 소유자(ownerUid) 본인만 읽고 쓸 수 있으면 충분하다 — 다른 유저는 절대 접근 불가.
