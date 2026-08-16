@@ -1970,12 +1970,11 @@
                 <button type="button" class="onboarding-close icon-btn-tap" id="onboardingCloseBtn" onclick="onboardingClose()" aria-label="나중에 하기">✕</button>
                 <div class="onboarding-progress-head" id="onboardingProgressHead">
                     <div class="onboarding-progress-track"><div class="onboarding-progress-fill" id="onboardingProgressFill"></div></div>
-                    <div class="onboarding-step-label" id="onboardingStepLabel">Step 1 of 8</div>
+                    <div class="onboarding-step-label" id="onboardingStepLabel">Step 1 of 9</div>
                 </div>
                 <div class="onboarding-body" id="onboardingStepBody"></div>
                 <div class="onboarding-nav" id="onboardingNav">
                     <button type="button" class="onboarding-back-btn" id="onboardingBackBtn" onclick="onboardingBack()">이전</button>
-                    <button type="button" class="onboarding-skip-btn" id="onboardingSkipBtn" onclick="onboardingSkipProject()">건너뛰기</button>
                     <button type="button" class="onboarding-next-btn" id="onboardingNextBtn" onclick="onboardingNext()">다음</button>
                 </div>
             </div>
@@ -3318,7 +3317,7 @@
                 bio: escapeHTML(u.bio || ''),
                 badgeGradient: gradientForUid(u.uid),
                 project: realProjectForCard(u.project),
-                dreamExchangeCountries: []
+                dreamExchangeCountries: u.dreamExchangeCountries || []
             };
         }
         // 탐색 그리드/저장한 학생/프로필 모달이 공유하는 "목업 + 실제 유저" 통합 목록.
@@ -3364,6 +3363,9 @@
             if (document.getElementById('page-home')?.classList.contains('active')) render();
             refreshProfileVisibilityToggle();
             if (typeof refreshMyPageCardPreview === 'function') refreshMyPageCardPreview();
+            // Dream Exchange 설정 그리드도 내 문서(dreamExchangeCountries)를 참조하므로, 세션 복원처럼
+            // 이 구독이 뒤늦게 데이터를 배달하는 경우까지 반영되도록 같이 다시 그린다.
+            if (typeof renderDreamCountryPicker === 'function') renderDreamCountryPicker();
         };
 
         // 설정 탭의 "학생 카드 공개" 토글 — window.__REAL_STUDENTS 안의 내 문서에서 profileVisible을
@@ -3626,20 +3628,20 @@
             }
         }
 
-        /* ---------- DREAM EXCHANGE COUNTRIES ---------- */
-        const MY_DREAM_COUNTRIES_KEY = 'unily_my_dream_countries';
+        /* ---------- DREAM EXCHANGE COUNTRIES ----------
+           예전엔 이 기기의 localStorage에만 저장돼서, 다른 사람 카드에 뜨는 것처럼 내 프로필에도
+           공개적으로 보여야 할 정보인데도 실제 계정(Firestore)엔 전혀 저장되지 않았다(다른 기기로
+           로그인하면 사라지고, 다른 사용자에게는 항상 빈 값으로만 보임 — realStudentToCard 참고).
+           이제는 온보딩/설정 어느 쪽에서 바꾸든 users/{uid} 문서에 바로 반영한다. */
         const MAX_DREAM_COUNTRIES = 5;
 
+        // window.__REAL_STUDENTS(onboardingComplete==true인 실제 유저 전체 구독)에는 내 uid의
+        // 문서도 포함되어 있어서(탐색 탭에서만 별도로 내 카드를 제외함), 로컬 캐시 없이 여기서
+        // 바로 내 최신 dreamExchangeCountries를 읽을 수 있다.
         function getMyDreamCountries() {
-            try {
-                return JSON.parse(localStorage.getItem(MY_DREAM_COUNTRIES_KEY) || '[]');
-            } catch (err) {
-                return [];
-            }
-        }
-
-        function setMyDreamCountries(codes) {
-            localStorage.setItem(MY_DREAM_COUNTRIES_KEY, JSON.stringify(codes));
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const mine = (window.__REAL_STUDENTS || []).find(u => u.uid === myUid);
+            return (mine && mine.dreamExchangeCountries) || [];
         }
 
         /* ==================================================================
@@ -3875,7 +3877,7 @@
             }).join('');
         }
 
-        function toggleMyDreamCountry(code) {
+        async function toggleMyDreamCountry(code) {
             let mine = getMyDreamCountries();
             if (mine.includes(code)) {
                 mine = mine.filter(x => x !== code);
@@ -3883,7 +3885,9 @@
                 if (mine.length >= MAX_DREAM_COUNTRIES) return;
                 mine = [...mine, code];
             }
-            setMyDreamCountries(mine);
+            if (window.__fbUpdateProfileFields) {
+                await window.__fbUpdateProfileFields({ dreamExchangeCountries: mine, dreamExchangeChoice: mine.length > 0 ? 'has' : 'none' });
+            }
             renderDreamCountryPicker();
             // 내 희망 국가가 바뀌면 Common Dream Destination 배지, 마이페이지 상단 "내 카드 미리보기"
             // 둘 다 즉시 갱신되어야 한다.
@@ -4987,23 +4991,54 @@
            - handleCredentialResponse()가 구글 로그인 직후(needsOnboarding===true일 때) onboardingOpen()을 호출.
            - 단계별로 onboardingStepHTML(step)이 #onboardingStepBody를 통째로 다시 그린다(SPA 프레임워크 없이
              이 파일 전체가 쓰는 "innerHTML 재렌더링" 패턴을 그대로 따름).
-           - 1~6단계는 필수, 7단계(프로젝트/모집)만 선택 사항 + 건너뛰기 버튼 제공.
-           - 7단계를 넘어갈 때(다음 또는 건너뛰기) 그 시점에만 Firestore에 한 번에 저장한다.
+           - 1~8단계는 전부 필수. 7단계(프로젝트)와 8단계(Dream Exchange)는 세부 내용까지 강제하진
+             않지만("있어요"/"없어요" 중 하나를 고르는 선택 자체는 필수) — 프로젝트가 없거나 교환
+             희망 국가가 없는 학생에게 억지로 아무 값이나 채우게 하지 않으면서도, 최소한 그 질문에
+             한 번은 답하고 지나가게 만든다.
+           - 8단계를 넘어갈 때 그 시점에 Firestore에 한 번에 저장한다.
            ================================================================== */
-        const ONBOARDING_TOTAL_STEPS = 8;
+        const ONBOARDING_TOTAL_STEPS = 9;
         let onboardingStep = 1;
-        let onboardingData = { name: '', studentEmail: '', university: '', universityId: null, major: '', bio: '', interests: [], project: null };
+        let onboardingData = { name: '', studentEmail: '', university: '', universityId: null, major: '', bio: '', interests: [], project: null, projectChoice: null, dreamExchangeCountries: [], dreamExchangeChoice: null };
+        // 온보딩 자체는 예전에 끝냈지만(projectChoice/dreamExchangeChoice가 생기기 전) 그 두 질문에는
+        // 아직 답한 적 없는 기존 유저에게, 로그인 직후 7~8단계만 강제로 보여주는 모드.
+        // 뒤로가기/닫기를 막아 반드시 답하고 넘어가게 한다 (onboardingOpenGapFill 참고).
+        let onboardingGapFillMode = false;
 
         function onboardingOpen() {
+            onboardingGapFillMode = false;
             onboardingStep = 1;
-            onboardingData = { name: '', studentEmail: '', university: '', universityId: null, major: '', bio: '', interests: [], project: null };
+            onboardingData = { name: '', studentEmail: '', university: '', universityId: null, major: '', bio: '', interests: [], project: null, projectChoice: null, dreamExchangeCountries: [], dreamExchangeChoice: null };
             const profile = UserService.getProfile();
             if (profile.name && profile.name !== 'Unily Member') onboardingData.name = profile.name;
             document.getElementById('onboardingOverlay').classList.add('active');
             onboardingRenderStep();
         }
 
+        // existing: Firestore users/{uid} 문서(이미 onboardingComplete===true). 나머지 필드는 그대로
+        // 두고 project/Dream Exchange 두 질문만 마저 물어본 뒤 같은 __fbSaveOnboarding으로 저장한다.
+        function onboardingOpenGapFill(existing) {
+            onboardingGapFillMode = true;
+            onboardingStep = 7;
+            onboardingData = {
+                name: existing.name || '',
+                studentEmail: existing.studentEmail || '',
+                university: existing.university || '',
+                universityId: existing.universityId || null,
+                major: existing.major || '',
+                bio: existing.bio || '',
+                interests: existing.interests || [],
+                project: existing.project || null,
+                projectChoice: existing.projectChoice || (existing.project ? 'has' : null),
+                dreamExchangeCountries: existing.dreamExchangeCountries || [],
+                dreamExchangeChoice: existing.dreamExchangeChoice || ((existing.dreamExchangeCountries || []).length > 0 ? 'has' : null),
+            };
+            document.getElementById('onboardingOverlay').classList.add('active');
+            onboardingRenderStep();
+        }
+
         function onboardingClose() {
+            if (onboardingGapFillMode) return; // 다 답하기 전까진 닫기 버튼 자체가 숨겨져 있지만, 혹시 몰라 한 번 더 막는다.
             document.getElementById('onboardingOverlay').classList.remove('active');
         }
 
@@ -5070,13 +5105,15 @@
             }
             if (step === 7) {
                 const project = d.project || {};
-                return `
-                    <div class="onboarding-icon">🚀</div>
-                    <h3 class="onboarding-title">진행 중인 프로젝트가 있나요?</h3>
-                    <p class="onboarding-sub">선택 사항이에요. 나중에 마이페이지에서 다시 추가할 수 있어요.</p>
-                    <div class="form-group">
+                const choiceRow = `
+                    <div class="onboarding-chip-grid">
+                        <button type="button" class="dream-chip${d.projectChoice === 'has' ? ' active' : ''}" onclick="onboardingSetProjectChoice('has')">있어요</button>
+                        <button type="button" class="dream-chip${d.projectChoice === 'none' ? ' active' : ''}" onclick="onboardingSetProjectChoice('none')">지금은 없어요</button>
+                    </div>`;
+                const detailFields = d.projectChoice === 'has' ? `
+                    <div class="form-group" style="margin-top:16px;">
                         <label>프로젝트명</label>
-                        <input type="text" id="onbProjectTitle" class="form-control" placeholder="예: 유학생 매칭 앱 팀원 모집" value="${escapeHTML(project.title || '')}" onkeydown="onboardingHandleKeydown(event)">
+                        <input type="text" id="onbProjectTitle" class="form-control" placeholder="예: 유학생 매칭 앱 팀원 모집" value="${escapeHTML(project.title || '')}" oninput="onboardingValidateStep()" onkeydown="onboardingHandleKeydown(event)" autofocus>
                     </div>
                     <div class="onboarding-recruit-row">
                         <label for="onbRecruiting">팀원을 모집 중이에요</label>
@@ -5088,9 +5125,32 @@
                     <div class="form-group" id="onbDeadlineGroup" style="margin-top:14px; ${project.recruiting ? '' : 'display:none;'}">
                         <label>모집 마감일</label>
                         <input type="date" id="onbDeadline" class="form-control" value="${escapeHTML(project.deadline || '')}">
-                    </div>`;
+                    </div>` : '';
+                return `
+                    <div class="onboarding-icon">🚀</div>
+                    <h3 class="onboarding-title">진행 중인 프로젝트가 있나요?</h3>
+                    <p class="onboarding-sub">없어도 괜찮아요 — 나중에 마이페이지에서 언제든 추가할 수 있어요.</p>
+                    ${choiceRow}
+                    ${detailFields}`;
             }
-            // step 8: 완료 화면
+            if (step === 8) {
+                const codes = d.dreamExchangeCountries;
+                const choiceRow = `
+                    <div class="onboarding-chip-grid">
+                        <button type="button" class="dream-chip${d.dreamExchangeChoice === 'has' ? ' active' : ''}" onclick="onboardingSetDreamChoice('has')">있어요</button>
+                        <button type="button" class="dream-chip${d.dreamExchangeChoice === 'none' ? ' active' : ''}" onclick="onboardingSetDreamChoice('none')">지금은 없어요</button>
+                    </div>`;
+                const countryGrid = d.dreamExchangeChoice === 'has' ? `
+                    <p class="onboarding-sub" style="margin-top:14px;">최대 ${MAX_DREAM_COUNTRIES}개까지 고를 수 있어요. (<span id="onboardingDreamCount">${codes.length}</span>/${MAX_DREAM_COUNTRIES})</p>
+                    <div class="onboarding-chip-grid" id="onboardingDreamGrid"></div>` : '';
+                return `
+                    <div class="onboarding-icon">🌍</div>
+                    <h3 class="onboarding-title">교환학생으로 가고 싶은 나라가 있나요?</h3>
+                    <p class="onboarding-sub">없어도 괜찮아요 — 나중에 마이페이지에서 언제든 추가할 수 있어요.</p>
+                    ${choiceRow}
+                    ${countryGrid}`;
+            }
+            // step 9: 완료 화면
             return `
                 <div class="onboarding-complete">
                     <div class="onboarding-icon">🎉</div>
@@ -5116,6 +5176,46 @@
             onboardingValidateStep();
         }
 
+        // 7단계(프로젝트)의 "있어요/없어요" 선택. "없어요"를 고르면 세부 입력칸 자체가 사라지므로
+        // 그 시점의 project를 비워서, 이전에 입력해뒀던 값이 다시 "있어요"를 눌렀을 때만 되살아나게 한다.
+        function onboardingSetProjectChoice(choice) {
+            onboardingData.projectChoice = choice;
+            onboardingRenderStep();
+        }
+
+        // 8단계(Dream Exchange)의 "있어요/없어요" 선택. 동일한 이유로 "없어요"면 국가 목록을 비운다.
+        function onboardingSetDreamChoice(choice) {
+            onboardingData.dreamExchangeChoice = choice;
+            if (choice === 'none') onboardingData.dreamExchangeCountries = [];
+            onboardingRenderStep();
+        }
+
+        function onboardingRenderDreamGrid() {
+            const grid = document.getElementById('onboardingDreamGrid');
+            if (!grid) return;
+            const mine = onboardingData.dreamExchangeCountries;
+            grid.innerHTML = COUNTRIES.map(c => {
+                const active = mine.includes(c.code);
+                const capReached = !active && mine.length >= MAX_DREAM_COUNTRIES;
+                return `<button type="button" class="dream-chip${active ? ' active' : ''}${capReached ? ' disabled' : ''}" onclick="onboardingToggleDreamCountry('${c.code}')">${c.flag} ${countryName(c.code)}</button>`;
+            }).join('');
+        }
+
+        function onboardingToggleDreamCountry(code) {
+            const mine = onboardingData.dreamExchangeCountries;
+            const idx = mine.indexOf(code);
+            if (idx >= 0) {
+                mine.splice(idx, 1);
+            } else {
+                if (mine.length >= MAX_DREAM_COUNTRIES) return;
+                mine.push(code);
+            }
+            onboardingRenderDreamGrid();
+            const countEl = document.getElementById('onboardingDreamCount');
+            if (countEl) countEl.textContent = mine.length;
+            onboardingValidateStep();
+        }
+
         function onboardingUpdateBioCounter() {
             const textarea = document.getElementById('onbBio');
             const counter = document.getElementById('onboardingBioCount');
@@ -5133,15 +5233,21 @@
         function onboardingRenderChrome() {
             const complete = onboardingStep >= ONBOARDING_TOTAL_STEPS;
             document.getElementById('onboardingProgressHead').style.display = complete ? 'none' : 'block';
-            document.getElementById('onboardingCloseBtn').style.display = complete ? 'none' : 'block';
-            document.getElementById('onboardingProgressFill').style.width = (onboardingStep / ONBOARDING_TOTAL_STEPS * 100) + '%';
-            document.getElementById('onboardingStepLabel').textContent = `Step ${Math.min(onboardingStep, ONBOARDING_TOTAL_STEPS)} of ${ONBOARDING_TOTAL_STEPS}`;
+            // 갭필 모드(레거시 유저에게 project/Dream Exchange만 마저 물어보는 화면)는 닫기 버튼 자체를
+            // 없애서 반드시 두 질문에 답하고 넘어가게 한다 — onboardingClose()의 가드와 이중 안전장치.
+            document.getElementById('onboardingCloseBtn').style.display = (complete || onboardingGapFillMode) ? 'none' : 'block';
+            if (onboardingGapFillMode) {
+                const gapStep = onboardingStep - 6; // 7,8단계만 쓰므로 1/2, 2/2로 보여준다
+                document.getElementById('onboardingProgressFill').style.width = (Math.min(gapStep, 2) / 2 * 100) + '%';
+                document.getElementById('onboardingStepLabel').textContent = `${Math.min(gapStep, 2)} / 2`;
+            } else {
+                document.getElementById('onboardingProgressFill').style.width = (onboardingStep / ONBOARDING_TOTAL_STEPS * 100) + '%';
+                document.getElementById('onboardingStepLabel').textContent = `Step ${Math.min(onboardingStep, ONBOARDING_TOTAL_STEPS)} of ${ONBOARDING_TOTAL_STEPS}`;
+            }
 
             const backBtn = document.getElementById('onboardingBackBtn');
-            const skipBtn = document.getElementById('onboardingSkipBtn');
             const nextBtn = document.getElementById('onboardingNextBtn');
-            backBtn.hidden = onboardingStep <= 1 || complete;
-            skipBtn.hidden = onboardingStep !== 7;
+            backBtn.hidden = onboardingStep <= 1 || complete || onboardingGapFillMode;
             nextBtn.classList.toggle('full-width', complete);
             nextBtn.textContent = complete ? '시작하기' : '다음';
         }
@@ -5161,11 +5267,11 @@
                 onboardingData.major = document.getElementById('onbMajor').value.trim();
             } else if (onboardingStep === 5) {
                 onboardingData.bio = document.getElementById('onbBio').value.trim();
-            } else if (onboardingStep === 7) {
+            } else if (onboardingStep === 7 && onboardingData.projectChoice === 'has') {
                 const title = document.getElementById('onbProjectTitle').value.trim();
                 const recruiting = document.getElementById('onbRecruiting').checked;
                 const deadline = document.getElementById('onbDeadline') ? document.getElementById('onbDeadline').value : '';
-                onboardingData.project = (title || recruiting) ? { title, recruiting, deadline: recruiting ? deadline : '' } : null;
+                onboardingData.project = title ? { title, recruiting, deadline: recruiting ? deadline : '' } : null;
             }
         }
 
@@ -5189,8 +5295,16 @@
                 valid = document.getElementById('onbBio').value.trim() !== '';
             } else if (onboardingStep === 6) {
                 valid = onboardingData.interests.length > 0;
+            } else if (onboardingStep === 7) {
+                // 프로젝트 세부 내용까지 강제하진 않지만, "있어요/없어요" 중 하나는 반드시 골라야 한다.
+                // "있어요"를 골랐다면 최소한 프로젝트명은 있어야 진짜로 "있는" 것으로 친다.
+                valid = onboardingData.projectChoice === 'none'
+                    || (onboardingData.projectChoice === 'has' && document.getElementById('onbProjectTitle')?.value.trim() !== '');
+            } else if (onboardingStep === 8) {
+                valid = onboardingData.dreamExchangeChoice === 'none'
+                    || (onboardingData.dreamExchangeChoice === 'has' && onboardingData.dreamExchangeCountries.length > 0);
             }
-            // 7단계(선택 사항)와 8단계(완료 화면)는 항상 다음으로 넘어갈 수 있다.
+            // 9단계(완료 화면)는 항상 다음으로 넘어갈 수 있다.
             nextBtn.disabled = !valid;
         }
 
@@ -5199,11 +5313,12 @@
             onboardingRenderChrome();
             if (onboardingStep === 6) onboardingRenderInterestGrid();
             if (onboardingStep === 3) initUniversityCombobox('onbUniversity');
+            if (onboardingStep === 8) onboardingRenderDreamGrid();
             onboardingValidateStep();
         }
 
         function onboardingBack() {
-            if (onboardingStep <= 1) return;
+            if (onboardingStep <= 1 || onboardingGapFillMode) return;
             onboardingCaptureCurrentStep();
             onboardingStep--;
             onboardingRenderStep();
@@ -5215,10 +5330,11 @@
             if (nextBtn.disabled) return;
 
             if (onboardingStep >= ONBOARDING_TOTAL_STEPS) {
+                onboardingGapFillMode = false; // 정상적으로 다 끝낸 뒤의 닫기까지 막으면 안 되므로 여기서 먼저 해제
                 onboardingClose();
                 return;
             }
-            if (onboardingStep === 7) {
+            if (onboardingStep === 8) {
                 await onboardingPersistAndAdvance();
                 return;
             }
@@ -5226,19 +5342,12 @@
             onboardingRenderStep();
         }
 
-        async function onboardingSkipProject() {
-            onboardingData.project = null;
-            await onboardingPersistAndAdvance();
-        }
-
-        // 7단계(프로젝트/모집)를 다음 또는 건너뛰기로 넘어갈 때만 Firestore에 한 번에 저장한다.
+        // 8단계(Dream Exchange)까지 다 넘어갈 때 그 시점에 Firestore에 한 번에 저장한다.
         async function onboardingPersistAndAdvance() {
             const nextBtn = document.getElementById('onboardingNextBtn');
-            const skipBtn = document.getElementById('onboardingSkipBtn');
             const originalLabel = nextBtn.textContent;
             nextBtn.disabled = true;
             nextBtn.textContent = '저장 중...';
-            if (skipBtn) skipBtn.disabled = true;
             try {
                 if (window.__fbSaveOnboarding) {
                     await window.__fbSaveOnboarding(onboardingData);
@@ -5259,7 +5368,6 @@
                 showToast(await translateText('저장에 실패했어요. 다시 시도해주세요.', currentLang), 'error');
                 nextBtn.disabled = false;
                 nextBtn.textContent = originalLabel;
-                if (skipBtn) skipBtn.disabled = false;
             }
         }
 
@@ -5698,11 +5806,18 @@
         // Firebase가 로그인 세션 복원을 마치면(비동기) 호출됨 → 작성 폼 접근 권한을 다시 계산한다.
         // needsOnboarding이 true면(방금 로그인했든, 세션이 복원된 기존 접속이든 상관없이)
         // 온보딩 위저드를 못 끝낸 사용자이므로 위저드를 띄워 마저 완료하게 한다.
-        window.__onAuthStateResolved = function (needsOnboarding) {
+        window.__onAuthStateResolved = function (needsOnboarding, profileGapFill) {
             refreshComposerAccess();
             if (typeof updateMessagesAuthGate === 'function') updateMessagesAuthGate();
             if (needsOnboarding && AuthService.isLoggedIn()) {
                 openOnboardingWithTermsGate();
+            } else if (profileGapFill && AuthService.isLoggedIn()) {
+                // 온보딩은 이미 끝난 유저인데 project/Dream Exchange "선택"만 아직 안 거친 경우 —
+                // onAuthStateChanged가 세션 복원 등으로 여러 번 불릴 수 있으니, 이미 떠 있으면 다시 열지 않는다.
+                const overlay = document.getElementById('onboardingOverlay');
+                if (overlay && !overlay.classList.contains('active') && typeof onboardingOpenGapFill === 'function') {
+                    onboardingOpenGapFill(profileGapFill);
+                }
             }
             // 채팅 말풍선의 "내가 보냄/상대가 보냄" 정렬은 window.__myUid()를 기준으로 계산되는데,
             // 페이지가 처음 뜬 직후 또는 재로그인 직후엔 Firebase 세션 복원이 비동기라 이 콜백이
@@ -7419,11 +7534,20 @@
         // 같은 문서 조회 결과로 onboardingComplete도 함께 확인해서, 방금 로그인했든 세션이
         // 복원된 재방문이든 상관없이 위저드를 못 끝낸 사용자라면 다시 띄울 수 있게 한다.
         let needsOnboarding = false;
+        // 온보딩 자체는 예전에 끝냈지만(project/Dream Exchange를 필수 선택으로 만들기 전 가입한
+        // 유저) projectChoice/dreamExchangeChoice가 아예 없는 경우, 그 유저의 기존 프로필 데이터를
+        // 담아서 넘긴다 — __onAuthStateResolved가 이 값이 있으면 갭필 팝업을 띄운다.
+        let profileGapFill = null;
         if (auth.currentUser) {
           try {
             const meSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
-            window.__myBlockedUids = (meSnap.exists() && meSnap.data().blockedUids) || [];
-            needsOnboarding = meSnap.exists() && meSnap.data().onboardingComplete !== true;
+            const meData = meSnap.exists() ? meSnap.data() : null;
+            window.__myBlockedUids = (meData && meData.blockedUids) || [];
+            needsOnboarding = !meData || meData.onboardingComplete !== true;
+            if (meData && meData.onboardingComplete === true &&
+                (meData.projectChoice === undefined || meData.dreamExchangeChoice === undefined)) {
+              profileGapFill = meData;
+            }
           } catch (err) {
             window.__myBlockedUids = [];
           }
@@ -7431,7 +7555,7 @@
           window.__myBlockedUids = [];
         }
 
-        if (typeof window.__onAuthStateResolved === "function") window.__onAuthStateResolved(needsOnboarding);
+        if (typeof window.__onAuthStateResolved === "function") window.__onAuthStateResolved(needsOnboarding, profileGapFill);
         // 메시지 화면을 보고 있는 도중에 Firebase 로그인 세션 복원이 뒤늦게 끝난 경우,
         // 대화 목록 구독이 조용히 실패한 채로 남아있지 않도록 다시 시도한다.
         const messagesPageActive = document.getElementById("page-messages")?.classList.contains("active");
@@ -7521,6 +7645,9 @@
           bio: data.bio,
           interests: data.interests,
           project: data.project,
+          projectChoice: data.projectChoice,
+          dreamExchangeCountries: data.dreamExchangeCountries || [],
+          dreamExchangeChoice: data.dreamExchangeChoice,
           onboardingComplete: true,
           onboardingCompletedAt: serverTimestamp(),
           isAiGenerated: false, // 실제 구글 로그인 + 위저드를 완료한 유저이므로 AI 생성 카드가 아님
