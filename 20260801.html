@@ -921,6 +921,11 @@
   .request-card-status { font-size: 13px; font-weight: 600; color: var(--indigo-deep); }
   .request-card.request-card-compact { padding: 10px 16px; }
   .request-card.request-card-compact .request-card-status { font-size: 12.5px; }
+  /* "You're Connected!" 카드 상단의 체크 아이콘 — 온보딩 완료 화면과 동일한 "팝인" 축하 연출을 재사용. */
+  .request-card-icon {
+    font-size: clamp(26px,4vw,32px); margin-bottom: 10px;
+    animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1);
+  }
 
   .msg-chat-body {
     flex: 1;
@@ -2897,7 +2902,8 @@
             '로그인 후 Connect 요청을 보낼 수 있어요.',
             '로그인 후 메시지를 보낼 수 있어요.',
             '로그인 후 프로젝트 참여를 요청할 수 있어요.',
-            '나중에 다시 확인하실 수 있어요.'
+            '나중에 다시 확인하실 수 있어요.',
+            '커넥트 되었습니다. 메시지를 시작해 보세요.'
         ];
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
@@ -4596,7 +4602,7 @@
            status가 없거나(레거시 대화방) 이미 예전부터 'accepted'였던 일반 대화는 이 함수를 호출하는
            쪽(renderChatArea)에서 애초에 걸러내므로, 여기서는 pending/declined/방금 수락됨만 다룬다.
            requestType으로 Connect 카드와 Project(팀 합류) 카드 문구를 구분한다. */
-        function renderRequestCardHTML(chat, myUid) {
+        function renderRequestCardHTML(chat, myUid, noMessagesYet) {
             const isRecipient = chat.requestedBy !== myUid;
             const isProject = chat.requestType === 'project';
 
@@ -4647,10 +4653,21 @@
                     <div class="request-card-status">요청을 거절했습니다.</div>
                   </div>`;
             }
-            // status === 'accepted': 정식 요청을 거쳐 막 연결/합류됐다는 걸 알려주는 작은 확인 문구.
-            // requestType이 없는(레거시) 대화에는 뜨지 않는다.
+            // status === 'accepted': 정식 요청을 거쳐 막 연결/합류됐다는 걸 알려주는 카드.
+            // requestType이 없는(레거시) 대화에는 뜨지 않는다. Connect 쪽은 아직 메시지를 한 번도
+            // 안 주고받은 "방금 연결된" 순간에만 크게 보여주고, 이미 대화가 진행된 뒤에는(다음에
+            // 다시 열어봤을 때) 조용히 사라진다 — 오래된 대화를 열 때마다 이 카드가 매번 뜨면
+            // 오히려 방해가 되므로, "메시지 0개"라는 자연스러운 신호로만 노출 시점을 제한한다.
             if (chat.status === 'accepted' && chat.requestType === 'connect') {
-                return `<div class="request-card request-card-compact"><div class="request-card-status">커넥션이 연결되었습니다</div></div>`;
+                if (!noMessagesYet) return '';
+                return `
+                  <div class="request-card">
+                    <div class="request-card-icon">✅</div>
+                    <div class="request-card-header">You're Connected!</div>
+                    <div class="request-card-main">${escapeHTML(chat.otherName || '')}님과 성공적으로 연결되었습니다.</div>
+                    <div class="request-card-sub">이제 1:1 메시지를 주고받을 수 있습니다.</div>
+                    <button type="button" class="btn-connect" style="width:100%;" onclick="focusMessageInput()">💬 메시지 보내기</button>
+                  </div>`;
             }
             if (chat.status === 'accepted' && isProject) {
                 const mainText = isRecipient
@@ -4668,6 +4685,12 @@
             return '';
         }
 
+        // "You're Connected!" 카드의 "💬 메시지 보내기" 버튼 — 채팅 입력창으로 포커스를 옮겨준다.
+        function focusMessageInput() {
+            const input = document.getElementById('msgInput');
+            if (input && !input.disabled) input.focus();
+        }
+
         async function respondToConnectRequest(chatId, decision) {
             if (!window.__fbRespondToConnectRequest) return;
             try {
@@ -4676,6 +4699,12 @@
                 console.error('요청 응답 실패:', err);
                 showToast(await translateText('처리에 실패했어요. 다시 시도해주세요.', currentLang), 'error');
                 return;
+            }
+            // 수락한 사람 본인 화면에는 여기서 바로 토스트를 띄운다. 요청을 "보냈던" 쪽 화면의
+            // "OO님이 수락했습니다" 토스트는 서버 값이 실시간으로 도착했을 때 감지해서 띄운다
+            // (watchConnectAcceptedForRequester 참고) — 두 경우가 겹치지 않도록 requestedBy로 구분됨.
+            if (decision === 'accepted') {
+                showToast(await translateText('커넥트 되었습니다. 메시지를 시작해 보세요.', currentLang));
             }
             renderChatArea();
             renderMessagesList();
@@ -4746,7 +4775,7 @@
             const chatInfo = isChannel ? null : getAllChatsCombined().find(c => c.id === currentChatId);
             // chatInfo.status가 없는(레거시) 대화는 항상 "열려있는" 대화로 취급 — 카드도 안 뜨고 입력창도 항상 활성.
             // 채널은 요청 카드 개념이 아예 없다(수락된 순간에만 생기고, 멤버만 애초에 들어올 수 있음).
-            const requestCardHTML = chatInfo ? renderRequestCardHTML(chatInfo, myUid) : '';
+            const requestCardHTML = chatInfo ? renderRequestCardHTML(chatInfo, myUid, messages.length === 0) : '';
             updateChatInputGate(chatInfo, myUid);
 
             const prevScrollTop = chatBody.scrollTop;
@@ -7674,6 +7703,25 @@
         };
 
         // Firestore chats 목록이 바뀔 때(module 스크립트의 onSnapshot에서 호출)
+        // 요청을 "보냈던" 쪽 화면에 "OO님이 커넥트 요청을 수락했습니다" 토스트를 띄우기 위해,
+        // 대화 목록이 갱신될 때마다 직전에 기억해둔 상태와 비교해서 pending -> accepted로 막
+        // 바뀐 순간만 감지한다. 감지한 즉시 상태를 갱신해서 같은 전환에 두 번 토스트가 뜨지 않게
+        // 하고, 페이지를 처음 열었을 때(직전 상태를 아직 모름)는 이미 accepted였어도 조용히 넘어간다.
+        const lastKnownConnectStatus = new Map();
+        async function checkConnectAcceptedTransitions() {
+            const myUid = window.__myUid ? window.__myUid() : null;
+            if (!myUid) return;
+            for (const chat of (window.__CHATS || [])) {
+                if (chat.requestType !== 'connect') continue;
+                const prev = lastKnownConnectStatus.get(chat.id);
+                if (prev === 'pending' && chat.status === 'accepted' && chat.requestedBy === myUid) {
+                    const msg = await translateText(`${chat.otherName || ''}님이 커넥트 요청을 수락했습니다. 대화를 시작해 보세요!`, currentLang);
+                    showToast(msg);
+                }
+                lastKnownConnectStatus.set(chat.id, chat.status || null);
+            }
+        }
+
         window.__onChatsChange = function () {
             if (isMessagesPageActive()) {
                 try { renderMessagesList(); } catch (err) { console.error(err); }
@@ -7683,6 +7731,7 @@
                     try { renderChatArea(); } catch (err) { console.error(err); }
                 }
             }
+            checkConnectAcceptedTransitions();
         };
         // 현재 열려있는 채팅방/채널의 메시지가 바뀔 때(module 스크립트의 onSnapshot에서 호출).
         // __subscribeChannelMessages도 이 콜백을 그대로 재사용한다.
