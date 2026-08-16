@@ -104,9 +104,13 @@ service cloud.firestore {
             || request.resource.data.requestedBy == request.auth.uid);
 
       // 수정: 참여자 본인만, participants 배열 자체는 바꿀 수 없음(대화 상대를 바꿔치기 못하도록).
-      // status 필드가 바뀌는 경우엔 추가로: 오직 pending -> accepted/declined로만 이동 가능하고,
-      // 그 전환은 반드시 요청을 "받은" 쪽(requestedBy가 아닌 참여자)만 할 수 있으며, requestedBy/
-      // requestType 자체는 한 번 정해지면 바꿀 수 없다(요청 상태를 임의로 되돌리거나 위조 방지).
+      // status 필드가 바뀌는 경우엔 다음 두 가지 전환만 허용한다:
+      //   1) pending -> accepted/declined: 요청을 "받은" 쪽(requestedBy가 아닌 참여자)만 가능,
+      //      requestedBy/requestType은 그대로 유지되어야 함(위조 방지).
+      //   2) (status가 아예 없거나 declined인) 대화에서 참여자 본인이 새로 pending 요청을 보냄 —
+      //      "정식으로 수락된 적 없는" 대화라면(레거시 대화 포함) Connect/프로젝트 참여 버튼을
+      //      다시 눌러 새 요청 카드를 보낼 수 있게 한다. 이미 accepted이거나 이미 pending인
+      //      대화는 이 경로로 건드릴 수 없다(진행 중인 관계를 임의로 되돌리지 못하도록).
       allow update: if request.auth != null
         && request.auth.uid in resource.data.participants
         && request.resource.data.participants == resource.data.participants
@@ -115,7 +119,11 @@ service cloud.firestore {
                   && request.auth.uid != resource.data.requestedBy
                   && request.resource.data.status in ['accepted', 'declined']
                   && request.resource.data.requestedBy == resource.data.requestedBy
-                  && request.resource.data.requestType == resource.data.requestType ) );
+                  && request.resource.data.requestType == resource.data.requestType )
+             || ( (resource.data.get('status', null) == null || resource.data.status == 'declined')
+                  && request.resource.data.status == 'pending'
+                  && request.resource.data.requestedBy == request.auth.uid
+                  && request.resource.data.requestType in ['connect', 'project'] ) );
 
       allow delete: if false;
 

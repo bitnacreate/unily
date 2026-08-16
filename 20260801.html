@@ -8552,10 +8552,27 @@
           createConnectNotification(myUid, otherUid, chatId).catch((err) =>
             console.error("Connect 알림 생성 실패:", err)
           );
-        } else if ((snap.data().deletedFor || []).includes(myUid)) {
-          // 이미 있던 대화(어떤 status든)라면 상태는 그대로 두고 삭제 목록에서만 복원한다 —
-          // 이미 수락됐던 대화를 다시 pending으로 되돌리지 않기 위함.
-          await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
+        } else {
+          const data = snap.data();
+          const updates = {};
+          if ((data.deletedFor || []).includes(myUid)) updates.deletedFor = arrayRemove(myUid);
+          // "정식으로 수락된 적 없는" 대화(레거시라 status가 아예 없거나, 예전에 거절됐던 경우)라면
+          // Connect를 다시 눌렀을 때 새 요청으로 취급해 pending으로 되돌린다. 이미 accepted이거나
+          // 이미 pending(응답 대기 중)인 대화는 여기서 건드리지 않는다 — firestore.rules도 동일한
+          // 조건으로만 이 전환을 허용한다.
+          if (!data.status || data.status === "declined") {
+            updates.status = "pending";
+            updates.requestedBy = myUid;
+            updates.requestType = "connect";
+          }
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(ref, updates);
+            if (updates.status === "pending") {
+              createConnectNotification(myUid, otherUid, chatId).catch((err) =>
+                console.error("Connect 알림 생성 실패:", err)
+              );
+            }
+          }
         }
         return chatId;
       };
@@ -8599,8 +8616,27 @@
           createConnectNotification(myUid, ownerUid, chatId).catch((err) =>
             console.error("프로젝트 참여 요청 알림 생성 실패:", err)
           );
-        } else if ((snap.data().deletedFor || []).includes(myUid)) {
-          await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
+        } else {
+          const data = snap.data();
+          const updates = {};
+          if ((data.deletedFor || []).includes(myUid)) updates.deletedFor = arrayRemove(myUid);
+          // Connect와 동일한 이유로, 정식으로 수락된 적 없는(레거시/거절됨) 대화라면 "프로젝트
+          // 참여하기"를 다시 눌렀을 때 새 요청으로 취급한다.
+          if (!data.status || data.status === "declined") {
+            updates.status = "pending";
+            updates.requestedBy = myUid;
+            updates.requestType = "project";
+            updates.projectOwnerUid = ownerUid;
+            updates.projectTitle = projectTitle || "";
+          }
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(ref, updates);
+            if (updates.status === "pending") {
+              createConnectNotification(myUid, ownerUid, chatId).catch((err) =>
+                console.error("프로젝트 참여 요청 알림 생성 실패:", err)
+              );
+            }
+          }
         }
         return chatId;
       };
