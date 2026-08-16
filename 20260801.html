@@ -952,7 +952,11 @@
     font-size: 13px; color: var(--ink); line-height: 1.6; margin: 0 0 14px;
     padding-top: 12px; border-top: 1px solid var(--line);
   }
-  .chat-profile-banner .shared-dream-badge { margin-bottom: 16px; }
+  /* "Shared Context" 한 줄 — 과하지 않은 옅은 톤의 중앙 정렬 미니 배지. */
+  .chat-profile-banner-shared {
+    display: inline-block; margin: 0 auto 16px; background: var(--bg-alt); color: var(--ink-soft);
+    font-size: 12.5px; font-weight: 500; padding: 5px 14px; border-radius: 100px;
+  }
   .chat-profile-banner-btn { width: 100%; }
 
   .msg-chat-body {
@@ -2840,6 +2844,10 @@
         // 모두 채워진 뒤 화면을 다시 그린다. 그래서 어떤 화면으로 이동하든, 어떤 대화를
         // 열든 이미 캐시에 번역이 준비되어 있어 즉시 보인다.
         const translationCache = {}; // { [langCode]: { [원문]: 번역문 } }
+        // 기계 번역이 대신할 수 없는 지정 문구를 미리 캐시에 박아둔다 — 이후 t()/translateText()가
+        // 이 원문을 만나면 실시간 번역(구글/제미나이) 대신 이 값을 그대로 쓴다. 다른 언어는 평소처럼
+        // 기계 번역으로 처리됨.
+        translationCache.en = { 'Unily로 연결된 사이예요': 'Connected on Unily' };
 
         function stripHtml(html) {
             const tmp = document.createElement('div');
@@ -2933,7 +2941,7 @@
             '로그인 후 프로젝트 참여를 요청할 수 있어요.',
             '나중에 다시 확인하실 수 있어요.',
             '커넥트 되었습니다. 메시지를 시작해 보세요.',
-            '두 분 모두 Unily 네트워크 소속이에요'
+            'Unily로 연결된 사이예요'
         ];
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
@@ -4816,8 +4824,14 @@
             const countryHTML = card.country
                 ? `<div class="chat-profile-banner-country">${escapeHTML(countryBadgeText(card.country))}</div>` : '';
             const uniLine = [card.university, card.major ? t(card.major) : ''].filter(Boolean).join(' · ');
-            const sharedHTML = sharedDreamBadgeHTML(card)
-                || `<div class="shared-dream-badge">🎓 ${escapeHTML(t('두 분 모두 Unily 네트워크 소속이에요'))}</div>`;
+            // 공통점 요약: Dream Exchange 희망 국가가 겹치면 그 내용으로, 아니면 기본 문구로.
+            // sharedDreamBadgeHTML()의 초록색 배지(학생 카드용)와는 다른, 이 배너 전용의 옅은
+            // 미니 배지 스타일(.chat-profile-banner-shared)로 통일해서 보여준다.
+            const sharedCountries = sharedDreamCountries(card);
+            const sharedText = sharedCountries.length > 0
+                ? t('You both want to study in {country}').replace('{country}', countryName(sharedCountries[0]))
+                : t('Unily로 연결된 사이예요');
+            const sharedHTML = `<div class="chat-profile-banner-shared">${escapeHTML(sharedText)}</div>`;
             return `
               <div class="chat-profile-banner">
                 <div class="chat-profile-banner-avatar" style="background:${card.badgeGradient || ''}">${initialsOf(card.name)}</div>
