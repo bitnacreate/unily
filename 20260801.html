@@ -747,6 +747,15 @@
     font-weight: 700;
     flex-shrink: 0;
   }
+  /* 개인 메시지 / 프로젝트 채널 탭 — 마이페이지 탭(.mypage-tabs)과 같은 알약 트랙 스타일을
+     사이드바 폭에 맞게 살짝 압축해서 재사용한다. */
+  .msg-tabs { display: flex; gap: 4px; background: var(--bg-alt); padding: 4px; border-radius: 100px; margin: 16px 20px 0; flex-shrink: 0; }
+  .msg-tab {
+    flex: 1; border: none; background: none; padding: 8px 10px; border-radius: 100px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+    transition: background .15s ease, color .15s ease;
+  }
+  .msg-tab.active { background: #fff; color: var(--indigo-deep); box-shadow: 0 6px 14px -6px rgba(90,70,220,.4); }
   .msg-search-wrap { padding: 14px 20px 0; flex-shrink: 0; }
   .msg-search-input {
     width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 100px;
@@ -800,6 +809,16 @@
     font-weight: 700;
     font-size: 15px;
   }
+  /* 프로젝트 채널 목록 아이템의 아바타 자리 — 원형(1:1 유저) 대신 각진 사각형 + # 기호로
+     "그룹 채널"임을 한눈에 구분되게 한다. */
+  .msg-channel-icon {
+    width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
+    background: var(--indigo); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 19px;
+  }
+  /* 채팅창 헤더(#activeAvatar)도 채널을 보고 있을 때는 같은 각진 모양으로 맞춘다. */
+  .msg-avatar.channel-mode { border-radius: 12px; }
   .msg-badge {
     position: absolute;
     top: -2px;
@@ -2137,17 +2156,24 @@
             </div>
             <!-- 왼쪽 대화 상대 목록 -->
             <div class="msg-sidebar">
-                <div class="msg-sidebar-header" data-i18n="msg_list_title">메시지 목록</div>
-                <div class="msg-search-wrap">
-                    <input type="text" id="msgSearchInput" class="msg-search-input" placeholder="이름으로 검색">
+                <div class="msg-tabs" id="msgTabs">
+                    <button type="button" class="msg-tab active" id="msgTabDm" onclick="switchMessagesTab('dm')">개인 메시지</button>
+                    <button type="button" class="msg-tab" id="msgTabChannels" onclick="switchMessagesTab('channels')">프로젝트 채널</button>
                 </div>
-                <div class="msg-filter-chips">
-                    <button type="button" class="msg-filter-chip active" id="msgFilterAll" onclick="setMsgFilter('all')">전체</button>
-                    <button type="button" class="msg-filter-chip" id="msgFilterUnread" onclick="setMsgFilter('unread')">
-                        안읽음<span class="msg-filter-count" id="msgFilterUnreadCount" style="display:none;"></span>
-                    </button>
+                <div id="dmListControls">
+                    <div class="msg-sidebar-header" data-i18n="msg_list_title">메시지 목록</div>
+                    <div class="msg-search-wrap">
+                        <input type="text" id="msgSearchInput" class="msg-search-input" placeholder="이름으로 검색">
+                    </div>
+                    <div class="msg-filter-chips">
+                        <button type="button" class="msg-filter-chip active" id="msgFilterAll" onclick="setMsgFilter('all')">전체</button>
+                        <button type="button" class="msg-filter-chip" id="msgFilterUnread" onclick="setMsgFilter('unread')">
+                            안읽음<span class="msg-filter-count" id="msgFilterUnreadCount" style="display:none;"></span>
+                        </button>
+                    </div>
                 </div>
                 <div class="msg-list" id="msgList"></div>
+                <div class="msg-list" id="channelList" style="display:none;"></div>
             </div>
             <!-- 오른쪽 실제 채팅 화면 -->
             <div class="msg-chat-area">
@@ -4299,6 +4325,8 @@
         // 프로젝트 채널을 보고 있을 때만 값이 들어간다. currentChatId/currentChannelId 둘 중
         // 하나만 항상 값을 가지도록 selectChat/selectChannel이 서로를 null로 비워준다.
         let currentChannelId = null;
+        // 사이드바가 지금 "개인 메시지"/"프로젝트 채널" 중 어느 탭을 보여주고 있는지.
+        let currentMessagesTab = 'dm';
 
         // 비로그인 상태에서는 사이드바 목록/채팅창을 아예 걷어내고 로그인 게이트만 보여준다.
         // 로그인 상태가 바뀔 수 있는 모든 지점(checkLoginState, 세션 복원 완료, 메시지함 진입)에서 호출한다.
@@ -4453,6 +4481,51 @@
             });
         }
 
+        // "개인 메시지" ↔ "프로젝트 채널" 탭 전환. DM 쪽 검색/필터 컨트롤은 채널 탭에서는 의미가
+        // 없으므로(채널 수가 적어 필터가 필요 없다고 보고) #dmListControls 통째로 같이 숨긴다.
+        function switchMessagesTab(tab) {
+            currentMessagesTab = tab;
+            document.getElementById('msgTabDm').classList.toggle('active', tab === 'dm');
+            document.getElementById('msgTabChannels').classList.toggle('active', tab === 'channels');
+            document.getElementById('dmListControls').style.display = tab === 'dm' ? '' : 'none';
+            document.getElementById('msgList').style.display = tab === 'dm' ? '' : 'none';
+            document.getElementById('channelList').style.display = tab === 'channels' ? '' : 'none';
+            if (tab === 'dm') renderMessagesList(); else renderChannelsList();
+        }
+
+        function channelsEmptyStateHTML() {
+            return `
+              <div class="msg-empty-state">
+                <div class="msg-empty-state-icon">📁</div>
+                <div class="msg-empty-state-title">참여 중인 프로젝트가 없습니다</div>
+                <div class="msg-empty-state-subtitle">프로젝트 참여 요청이 수락되면 여기에 전용 채널이 생겨요.</div>
+              </div>
+            `;
+        }
+
+        // renderMessagesList()와 같은 innerHTML 재렌더링 패턴을 그대로 따르되, 항목 아이콘만
+        // 원형 아바타 대신 .msg-channel-icon(각진 사각형 + #)으로 바꿔 DM과 시각적으로 구분한다.
+        function renderChannelsList() {
+            const listEl = document.getElementById('channelList');
+            if (!listEl) return;
+            const channels = window.__PROJECT_CHANNELS || [];
+            if (channels.length === 0) {
+                listEl.innerHTML = channelsEmptyStateHTML();
+                return;
+            }
+            listEl.innerHTML = channels.map(c => `
+                <div class="msg-item ${c.id === currentChannelId ? 'active' : ''}" onclick="goToProjectChannel('${c.id}')">
+                  <div class="msg-channel-icon">#</div>
+                  <div class="msg-info">
+                    <div class="msg-name-row">
+                      <span class="msg-name">${escapeHTML(c.title || '')}</span>
+                      <span class="msg-time">${c.updatedAt ? relativeTimeLabel(c.updatedAt) : ''}</span>
+                    </div>
+                    <div class="msg-preview">${escapeHTML(c.lastMessage || '')}</div>
+                  </div>
+                </div>
+            `).join('');
+        }
 
         function selectChat(chatId) {
             currentChatId = chatId;
@@ -4474,6 +4547,7 @@
 
             document.getElementById('activeAvatar').innerText = initialsOf(item ? item.otherName : '');
             document.getElementById('activeAvatar').style.background = (item && item.otherBadgeGradient) || (otherProfile ? otherProfile.badgeGradient : '');
+            document.getElementById('activeAvatar').classList.remove('channel-mode');
             document.getElementById('activeName').innerText = item
                 ? `${item.otherName}${otherProfile && otherProfile.flag ? ' ' + otherProfile.flag : ''}` : '';
             document.getElementById('activeUni').innerText = otherProfile
@@ -4483,7 +4557,10 @@
             const viewProfileBtn = document.getElementById('chatViewProfileBtn');
             if (viewProfileBtn) viewProfileBtn.style.display = otherProfile ? 'inline-flex' : 'none';
 
-            renderMessagesList();
+            // 채널 탭을 보고 있다가 DM으로 이동하는 경우(예: Connect 직후)까지 사이드바가 항상
+            // 지금 열려있는 화면과 맞는 탭을 보여주게 한다. switchMessagesTab이 이미 목록을
+            // 다시 그려주므로, 탭을 안 바꿔도 되는 경우에만 별도로 renderMessagesList()를 부른다.
+            if (currentMessagesTab !== 'dm') switchMessagesTab('dm'); else renderMessagesList();
             // 어느 쪽이었든 이전 채팅방/채널 구독은 확실히 끊고, 새로 고른 채팅방 종류에 맞는 구독을 시작한다.
             if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
             if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
@@ -4515,11 +4592,13 @@
             const channel = (window.__PROJECT_CHANNELS || []).find(c => c.id === channelId);
             document.getElementById('activeAvatar').innerText = '#';
             document.getElementById('activeAvatar').style.background = '';
+            document.getElementById('activeAvatar').classList.add('channel-mode');
             document.getElementById('activeName').innerText = channel ? channel.title : '';
             document.getElementById('activeUni').innerText = channel ? `${(channel.memberUids || []).length}명 참여 중` : '';
             document.getElementById('activeLocalTime').style.display = 'none';
             document.getElementById('msgHeaderActions').style.display = 'none';
 
+            if (currentMessagesTab !== 'channels') switchMessagesTab('channels'); else renderChannelsList();
             if (window.__unsubscribeChatMessages) window.__unsubscribeChatMessages();
             if (window.__unsubscribeMockChatMessages) window.__unsubscribeMockChatMessages();
             if (window.__subscribeChannelMessages) window.__subscribeChannelMessages(channelId);
@@ -7846,7 +7925,12 @@
         // 정보(제목/인원수)만 갱신한다 — selectChannel을 다시 부르면 메시지 구독까지 매번 끊었다
         // 다시 맺어서 낭비이므로, 헤더 텍스트만 가볍게 다시 그린다. 채널 목록 UI 자체는 다음 단계.
         window.__onChannelsChange = function () {
-            if (!isMessagesPageActive() || !currentChannelId) return;
+            if (!isMessagesPageActive()) return;
+            // 채널 탭을 보고 있으면 목록(새 채널 생김/미리보기 변경 등)을 다시 그린다.
+            if (currentMessagesTab === 'channels') {
+                try { renderChannelsList(); } catch (err) { console.error(err); }
+            }
+            if (!currentChannelId) return;
             const channel = (window.__PROJECT_CHANNELS || []).find(c => c.id === currentChannelId);
             if (!channel) return;
             try {
