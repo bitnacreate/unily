@@ -3497,8 +3497,14 @@
             const deadlinePill = (p.recruiting && p.deadlineDays !== null)
                 ? `<span class="project-meta-pill">⏳ ${projectDeadlineText(p.deadlineDays)}</span>` : '';
             const metaRow = spotsPill || deadlinePill ? `<div class="project-recruit-meta-row">${spotsPill}${deadlinePill}</div>` : '';
+            // uid만 넘기고 이름/프로젝트명은 requestProjectJoin이 직접 찾아보게 한다(connectWithRealStudent와
+            // 동일한 패턴) — 이름·제목같은 자유 텍스트를 onclick="..." 안에 직접 끼워넣으면, 그 안에
+            // 작은따옴표(예: "O'Brien", "Sarah's App")가 하나만 있어도 JS 문자열이 중간에 끊겨버린다.
+            // escapeHTML은 attribute 경계(큰따옴표)만 지켜줄 뿐, 브라우저가 attribute를 읽으면서 그
+            // 엔티티를 다시 원래 문자로 풀어버리기 때문에 안쪽 JS 문자열 경계는 못 지켜준다 —
+            // 예전에 JSON.stringify()로 감쌌을 때도 같은 이유(반대 방향인 큰따옴표 충돌)로 깨졌었다.
             const connectBtn = opts.preview ? '' :
-                `<button class="btn-connect" style="width:100%; margin-top:10px;" onclick="event.stopPropagation(); requestProjectJoin('${s.uid}', ${JSON.stringify(s.name)}, ${JSON.stringify(p.title)})">${projectUIText('btn_join')}</button>`;
+                `<button class="btn-connect" style="width:100%; margin-top:10px;" onclick="event.stopPropagation(); requestProjectJoin('${s.uid}')">${projectUIText('btn_join')}</button>`;
             return `
           <div class="project-recruit-box">
             <div class="project-recruit-label">${icon} ${labelText}</div>
@@ -3532,12 +3538,15 @@
 
         // "프로젝트 참여하기" 버튼(실제 유저 카드): __fbRequestProjectJoin으로 프로젝트 소유자에게
         // "대기(pending)" 상태의 참여 요청을 보낸다. 수락되면 소유자 쪽에서 프로젝트 채널이 만들어진다.
-        async function requestProjectJoin(ownerUid, ownerName, projectTitle) {
+        async function requestProjectJoin(ownerUid) {
             if (!(window.__myUid && window.__myUid())) {
                 showToast(await translateText('로그인 후 프로젝트 참여를 요청할 수 있어요.', currentLang));
                 return;
             }
             if (!window.__fbRequestProjectJoin) return;
+            const owner = (window.__REAL_STUDENTS || []).find(u => u.uid === ownerUid);
+            const ownerName = owner ? owner.name : '';
+            const projectTitle = owner && owner.project ? owner.project.title : '';
             try {
                 const chatId = await window.__fbRequestProjectJoin(ownerUid, ownerName, projectTitle);
                 showPage('messages');
@@ -3548,18 +3557,28 @@
             }
         }
 
+        // onclick="..." 속성 안에 s.id를 안전하게 끼워넣는 리터럴을 만든다. 실제 유저는 id가
+        // 문자열("real-{uid}")이라 작은따옴표로 감싸고, mock 학생은 숫자라 그대로 쓴다.
+        // JSON.stringify로 문자열을 감싸면 큰따옴표 문자열이 만들어져서, 이 함수들이 쓰이는
+        // onclick="..." 속성 자체(큰따옴표로 감싸여 있음)와 충돌해 속성이 중간에 끊기고
+        // 클릭할 때마다 "일시적인 오류" 토스트로 이어지는 버그가 있었다(프로젝트 참여하기 버튼에서
+        // 실제로 발생해 발견됨 — 같은 패턴이 프로필 보기/하트 저장 버튼에도 있어 함께 고침).
+        function idLiteral(id) {
+            return typeof id === 'string' ? `'${id}'` : String(id);
+        }
+
         // 학생 카드 하나의 HTML을 만들어주는 공용 함수 (탐색 그리드 / 마이페이지의 Saved Students 그리드 /
         // 내 프로필 미리보기 카드에서 공유). previewMode면 저장(하트)·Connect 버튼을 뺀 "보기 전용" 카드가 된다.
         function studentCardHTML(s, opts) {
             opts = opts || {};
             const saved = opts.previewMode ? false : isSaved(s.id);
-            const cardClickAttr = opts.clickableProfile ? ` onclick="openStudentProfile(${JSON.stringify(s.id)})" style="cursor:pointer;"` : '';
+            const cardClickAttr = opts.clickableProfile ? ` onclick="openStudentProfile(${idLiteral(s.id)})" style="cursor:pointer;"` : '';
             const favBtnHTML = opts.previewMode ? '' :
-                `<button class="card-fav-btn icon-btn-tap${saved ? ' is-saved' : ''}" onclick="toggleSaveStudent(${JSON.stringify(s.id)}, event)">${saved ? '♥' : '♡'}</button>`;
+                `<button class="card-fav-btn icon-btn-tap${saved ? ' is-saved' : ''}" onclick="toggleSaveStudent(${idLiteral(s.id)}, event)">${saved ? '♥' : '♡'}</button>`;
             const connectBtnHTML = opts.previewMode ? '' :
                 (s.isReal
                     ? `<button class="btn-connect" onclick="event.stopPropagation(); connectWithRealStudent('${s.uid}')">Connect</button>`
-                    : `<button class="btn-connect" onclick="event.stopPropagation(); connectStudent(${JSON.stringify(s.id)})">Connect</button>`);
+                    : `<button class="btn-connect" onclick="event.stopPropagation(); connectStudent(${idLiteral(s.id)})">Connect</button>`);
             const projectHTML = s.project ? (s.isReal ? realProjectBoxHTML(s, { preview: opts.previewMode }) : projectBoxHTML(s)) : '';
             // 실제 유저(isAiGenerated: false/undefined)에는 절대 렌더링되지 않고, students 배열 출신
             // 가상 카드(isAiGenerated: true)에만 상단에 "AI 프로필" 배지 + 안내 툴팁이 붙는다.
