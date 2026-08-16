@@ -902,6 +902,26 @@
   }
   .msg-more-menu button:hover { background: var(--bg-alt); }
   .msg-more-menu button.danger { color: #E0447A; }
+
+  /* Connect 요청 카드 — 채팅창(.msg-chat-body) 맨 위에 pending/declined 상태일 때만 뜬다.
+     방금 수락된 대화에는 .request-card-compact 변형으로 훨씬 얇은 확인 줄만 보여준다. */
+  .request-card {
+    flex-shrink: 0; margin: 4px auto 6px; max-width: 380px; width: 100%;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg);
+    padding: 20px; text-align: center; box-shadow: 0 10px 24px -14px rgba(90,70,220,.35);
+  }
+  .request-card-header {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--indigo-deep); margin-bottom: 8px;
+  }
+  .request-card-main { font-size: 14.5px; font-weight: 700; color: var(--ink); margin-bottom: 6px; line-height: 1.4; }
+  .request-card-sub { font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 16px; }
+  .request-card-actions { display: flex; gap: 8px; }
+  .request-card-actions .btn-connect, .request-card-actions .btn-reset { flex: 1; }
+  .request-card-status { font-size: 13px; font-weight: 600; color: var(--indigo-deep); }
+  .request-card.request-card-compact { padding: 10px 16px; }
+  .request-card.request-card-compact .request-card-status { font-size: 12.5px; }
+
   .msg-chat-body {
     flex: 1;
     min-height: 0; /* flex item이 내용 크기만큼 늘어나는 것을 막아 overflow-y:auto가 실제로 동작하게 함 */
@@ -3418,9 +3438,24 @@
         }
 
         // 실제 유저 카드의 "Connect" 버튼: 실제 1:1 채팅을 시작한다 (mock 학생의 alert뿐인 connectStudent와 구분).
-        function connectWithRealStudent(uid) {
+        // 일반 Connect 버튼: __fbSendConnectRequest로 "대기(pending)" 상태의 요청을 보낸다.
+        // 게시글/댓글 작성자에게 말 걸기(startChatWithUser)는 즉시 열리는 채팅을 그대로 쓴다 —
+        // Connect 버튼을 통한 정식 요청만 상대의 수락/거절을 거치게 하려는 의도.
+        async function connectWithRealStudent(uid) {
+            if (!(window.__myUid && window.__myUid())) {
+                showToast(await translateText('로그인 후 메시지를 보낼 수 있어요.', currentLang));
+                return;
+            }
+            if (!window.__fbSendConnectRequest) return;
             const u = (window.__REAL_STUDENTS || []).find(x => x.uid === uid);
-            startChatWithUser(uid, u ? u.name : '');
+            try {
+                const chatId = await window.__fbSendConnectRequest(uid, u ? u.name : '');
+                showPage('messages');
+                selectChat(chatId);
+            } catch (err) {
+                console.error('Connect 요청 실패:', err);
+                alert(await translateText('메시지를 시작할 수 없습니다.', currentLang));
+            }
         }
 
         // 학생 카드 하나의 HTML을 만들어주는 공용 함수 (탐색 그리드 / 마이페이지의 Saved Students 그리드 /
@@ -4493,6 +4528,77 @@
             window.__toggleReaction(currentChatId, messageId, emoji).catch(err => console.error('리액션 실패:', err));
         }
 
+        /* ---------- CONNECT 요청 카드 (대화방 status가 pending/declined일 때 채팅창 맨 위에 표시) ----------
+           status가 없거나(레거시 대화방) 'accepted'인 일반 대화는 이 함수를 호출하는 쪽(renderChatArea)에서
+           애초에 걸러내므로, 여기서는 pending/declined/방금 수락된 connect만 다룬다. */
+        function renderRequestCardHTML(chat, myUid) {
+            const isRecipient = chat.requestedBy !== myUid;
+            if (chat.status === 'pending') {
+                if (isRecipient) {
+                    return `
+                      <div class="request-card">
+                        <div class="request-card-header">Connection Request</div>
+                        <div class="request-card-main">${escapeHTML(chat.otherName || '')}님으로부터 네트워킹 요청이 도착했습니다.</div>
+                        <div class="request-card-sub">수락 시 상대방과 직접 메시지를 주고받으며 프로필을 공유할 수 있습니다.</div>
+                        <div class="request-card-actions">
+                          <button type="button" class="btn-connect" onclick="respondToConnectRequest('${chat.id}', 'accepted')">수락하기</button>
+                          <button type="button" class="btn-reset" onclick="respondToConnectRequest('${chat.id}', 'declined')">거절하기</button>
+                        </div>
+                      </div>`;
+                }
+                return `
+                  <div class="request-card">
+                    <div class="request-card-header">Connection Request</div>
+                    <div class="request-card-main">${escapeHTML(chat.otherName || '')}님에게 네트워킹 요청을 보냈습니다.</div>
+                    <div class="request-card-status">요청을 보냈습니다. 상대의 수락을 기다리는 중이에요.</div>
+                  </div>`;
+            }
+            if (chat.status === 'declined') {
+                return `
+                  <div class="request-card">
+                    <div class="request-card-header">Connection Request</div>
+                    <div class="request-card-status">요청을 거절했습니다.</div>
+                  </div>`;
+            }
+            // status === 'accepted' && requestType === 'connect': 정식 요청을 거쳐 막 연결된
+            // 대화라는 걸 알려주는 작은 확인 문구. 레거시 대화(requestType 없음)에는 뜨지 않는다.
+            if (chat.status === 'accepted' && chat.requestType === 'connect') {
+                return `<div class="request-card request-card-compact"><div class="request-card-status">커넥션이 연결되었습니다</div></div>`;
+            }
+            return '';
+        }
+
+        async function respondToConnectRequest(chatId, decision) {
+            if (!window.__fbRespondToConnectRequest) return;
+            try {
+                await window.__fbRespondToConnectRequest(chatId, decision);
+            } catch (err) {
+                console.error('요청 응답 실패:', err);
+                showToast(await translateText('처리에 실패했어요. 다시 시도해주세요.', currentLang), 'error');
+                return;
+            }
+            renderChatArea();
+            renderMessagesList();
+        }
+
+        // pending 상태에서 "요청을 받은" 쪽은 수락 전까진 입력창 자체를 못 쓰게 막는다(서버
+        // 쪽 firestore.rules도 동일한 조건으로 메시지 생성을 막고 있음 — 여기는 UX용 보조 장치).
+        // declined면 양쪽 다 비활성화. 그 외(레거시/accepted/내가 보낸 pending 요청)는 항상 활성.
+        function updateChatInputGate(chatInfo, myUid) {
+            const input = document.getElementById('msgInput');
+            const sendBtn = document.querySelector('.msg-send-btn');
+            if (!input || !sendBtn) return;
+            const blocked = !!chatInfo && (
+                chatInfo.status === 'declined' ||
+                (chatInfo.status === 'pending' && chatInfo.requestedBy !== myUid)
+            );
+            input.disabled = blocked;
+            sendBtn.disabled = blocked;
+            input.placeholder = blocked
+                ? (chatInfo.status === 'declined' ? '거절된 요청입니다' : '상대가 수락하면 메시지를 보낼 수 있어요')
+                : 'Type a message... (Instant Translation enabled)';
+        }
+
         // 채팅창 스크롤: 사용자가 이미 맨 아래 근처에 있을 때만(또는 명시적으로 요청했을 때만)
         // 새로 렌더링한 뒤 맨 아래로 내린다. 과거 메시지를 읽고 있을 때는 스크롤 위치를 그대로 유지한다.
         function renderChatArea(opts) {
@@ -4503,19 +4609,26 @@
                 // 빈 상태 문구만 깔끔하게 채팅 영역 전체를 채우도록 한다.
                 document.getElementById('chatHeader').style.display = 'none';
                 chatBody.innerHTML = msgEmptyStateHTML();
+                updateChatInputGate(null, null);
                 return;
             }
             document.getElementById('chatHeader').style.display = 'flex';
             const messages = isMockChatId(currentChatId) ? (window.__ACTIVE_MOCK_MESSAGES || []) : (window.__ACTIVE_MESSAGES || []);
             const myUid = window.__myUid ? window.__myUid() : null;
             const chatInfo = getAllChatsCombined().find(c => c.id === currentChatId);
+            // chatInfo.status가 없는(레거시) 대화는 항상 "열려있는" 대화로 취급 — 카드도 안 뜨고 입력창도 항상 활성.
+            const requestCardHTML = chatInfo ? renderRequestCardHTML(chatInfo, myUid) : '';
+            updateChatInputGate(chatInfo, myUid);
 
             const prevScrollTop = chatBody.scrollTop;
             const prevScrollHeight = chatBody.scrollHeight;
             const wasNearBottom = opts.forceScrollBottom || (prevScrollHeight - prevScrollTop - chatBody.clientHeight < 100);
 
             if (messages.length === 0) {
-                chatBody.innerHTML = msgEmptyStateHTML();
+                // 요청 카드가 이미 상황을 설명해주므로, 카드가 뜨는 상태에서는 "메시지를 보내
+                // 대화를 시작해보세요" 같은 일반 빈 상태 문구를 같이 보여주면 오히려 혼란스럽다
+                // (특히 입력창이 막혀있는 수신자 입장에서 모순돼 보임).
+                chatBody.innerHTML = requestCardHTML || msgEmptyStateHTML();
                 return;
             }
 
@@ -4603,7 +4716,7 @@
                 lastMsgTime = m.createdAt;
             });
 
-            chatBody.innerHTML = html;
+            chatBody.innerHTML = requestCardHTML + html;
             queueMessageTranslations(messages);
 
             if (wasNearBottom) {
@@ -4616,7 +4729,7 @@
         async function sendChatMessage() {
             const input = document.getElementById('msgInput');
             const text = input.value.trim();
-            if (!text || !currentChatId) return;
+            if (!text || !currentChatId || input.disabled) return;
 
             const replyTo = replyingToMessage
                 ? { messageId: replyingToMessage.id, text: replyingToMessage.text, senderUid: replyingToMessage.senderUid }
@@ -7425,6 +7538,11 @@
         window.__onChatsChange = function () {
             if (isMessagesPageActive()) {
                 try { renderMessagesList(); } catch (err) { console.error(err); }
+                // 지금 열어둔 대화방의 상대가 다른 창/기기에서 Connect 요청을 수락·거절하면
+                // status가 바뀌므로, 그 즉시 요청 카드/입력창 상태도 다시 그려서 반영한다.
+                if (currentChatId) {
+                    try { renderChatArea(); } catch (err) { console.error(err); }
+                }
             }
         };
         // 현재 열려있는 채팅방의 메시지가 바뀔 때(module 스크립트의 onSnapshot에서 호출)
@@ -8037,6 +8155,11 @@
                 pinned: (data.pinnedBy || []).includes(myUid),
                 otherLastReadAt: toMillis(lastReadMap[otherUid]),
                 deletedForMe: (data.deletedFor || []).includes(myUid),
+                // Connect 요청 카드 렌더링에 필요한 필드들. status가 없는(레거시) 대화방은
+                // undefined로 남아 "항상 열려있는 대화"로 취급된다(renderChatArea 참고).
+                status: data.status || null,
+                requestedBy: data.requestedBy || null,
+                requestType: data.requestType || null,
               };
             })
             .filter((c) => !c.deletedForMe && !myBlocked.includes(c.otherUid));
@@ -8235,6 +8358,51 @@
           await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
         }
         return chatId;
+      };
+
+      // "Connect" 버튼 전용 — __startOrGetChat과 달리 즉시 열린 대화를 만들지 않고, 상대가
+      // 수락하기 전까진 "대기(pending)" 상태로만 대화방을 만든다. 게시글/댓글 작성자에게 말
+      // 걸기(startChatWithUser)는 여전히 위의 __startOrGetChat을 그대로 써서 즉시 열린다 —
+      // 정식 Connect 버튼을 통한 요청만 수락/거절 절차를 거치게 하려는 의도.
+      window.__fbSendConnectRequest = async function (otherUid, otherName) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        const myUid = auth.currentUser.uid;
+        if (myUid === otherUid) throw new Error("자기 자신에게는 메시지를 보낼 수 없습니다.");
+        if ((window.__myBlockedUids || []).includes(otherUid)) throw new Error("차단한 사용자입니다.");
+        const chatId = chatIdFor(myUid, otherUid);
+        const ref = doc(db, "chats", chatId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            participants: [myUid, otherUid].sort(),
+            participantInfo: {
+              [myUid]: { name: auth.currentUser.displayName || "" },
+              [otherUid]: { name: otherName || "" },
+            },
+            lastMessage: "",
+            updatedAt: serverTimestamp(),
+            unreadCount: { [myUid]: 0, [otherUid]: 0 },
+            pinnedBy: [],
+            deletedFor: [],
+            status: "pending",
+            requestedBy: myUid,
+            requestType: "connect",
+          });
+          createConnectNotification(myUid, otherUid, chatId).catch((err) =>
+            console.error("Connect 알림 생성 실패:", err)
+          );
+        } else if ((snap.data().deletedFor || []).includes(myUid)) {
+          // 이미 있던 대화(어떤 status든)라면 상태는 그대로 두고 삭제 목록에서만 복원한다 —
+          // 이미 수락됐던 대화를 다시 pending으로 되돌리지 않기 위함.
+          await updateDoc(ref, { deletedFor: arrayRemove(myUid) });
+        }
+        return chatId;
+      };
+
+      // Connect 요청 카드의 수락/거절 버튼이 호출. decision은 'accepted' | 'declined'.
+      window.__fbRespondToConnectRequest = async function (chatId, decision) {
+        if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        await updateDoc(doc(db, "chats", chatId), { status: decision });
       };
 
       /* ==================================================================
