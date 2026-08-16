@@ -885,7 +885,13 @@
     gap: 14px;
     flex-shrink: 0;
   }
-  .msg-header-actions { position: relative; flex-shrink: 0; }
+  .msg-header-actions { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
+  .msg-view-profile-btn {
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: 100px;
+    cursor: pointer; white-space: nowrap; transition: all .15s ease;
+  }
+  .msg-view-profile-btn:hover { background: var(--bg-alt); border-color: var(--indigo); color: var(--indigo-deep); }
   .msg-more-btn {
     border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer;
     color: var(--ink-soft);
@@ -926,6 +932,28 @@
     font-size: clamp(26px,4vw,32px); margin-bottom: 10px;
     animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1);
   }
+
+  /* 대화방 맨 위에 고정으로 뜨는 상대방 미니 프로필 카드(LinkedIn/Read.cv 스타일 소개 카드).
+     .request-card와 같은 카드 톤을 쓰되, 큰 아바타 중심으로 구성이 다르다. */
+  .chat-profile-banner {
+    flex-shrink: 0; margin: 4px auto 10px; max-width: 380px; width: 100%;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg);
+    padding: 24px 20px; text-align: center; box-shadow: 0 10px 24px -14px rgba(90,70,220,.35);
+  }
+  .chat-profile-banner-avatar {
+    width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 50%;
+    background: var(--indigo); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700;
+  }
+  .chat-profile-banner-name { font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+  .chat-profile-banner-country { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; }
+  .chat-profile-banner-uni { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px; }
+  .chat-profile-banner-bio {
+    font-size: 13px; color: var(--ink); line-height: 1.6; margin: 0 0 14px;
+    padding-top: 12px; border-top: 1px solid var(--line);
+  }
+  .chat-profile-banner .shared-dream-badge { margin-bottom: 16px; }
+  .chat-profile-banner-btn { width: 100%; }
 
   .msg-chat-body {
     flex: 1;
@@ -2132,6 +2160,7 @@
                         <div class="local-time-inline" id="activeLocalTime" style="display:none;"></div>
                     </div>
                     <div class="msg-header-actions" id="msgHeaderActions" style="display:none;">
+                        <button type="button" class="msg-view-profile-btn" id="chatViewProfileBtn" onclick="viewCurrentChatProfile()" style="display:none;">프로필 보기</button>
                         <button type="button" class="msg-more-btn icon-btn-tap" id="chatMoreBtn" onclick="toggleChatMoreMenu()" aria-label="더보기">⋯</button>
                         <div class="msg-more-menu" id="chatMoreMenu" style="display:none;">
                             <button type="button" onclick="handleDeleteConversation()">대화 내역 삭제</button>
@@ -2903,7 +2932,8 @@
             '로그인 후 메시지를 보낼 수 있어요.',
             '로그인 후 프로젝트 참여를 요청할 수 있어요.',
             '나중에 다시 확인하실 수 있어요.',
-            '커넥트 되었습니다. 메시지를 시작해 보세요.'
+            '커넥트 되었습니다. 메시지를 시작해 보세요.',
+            '두 분 모두 Unily 네트워크 소속이에요'
         ];
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
@@ -4436,12 +4466,18 @@
                 document.getElementById('backToMsgList').style.display = 'block';
             }
 
+            const otherProfile = otherRealProfileForChat(chatId, item);
+
             document.getElementById('activeAvatar').innerText = initialsOf(item ? item.otherName : '');
-            document.getElementById('activeAvatar').style.background = (item && item.otherBadgeGradient) || '';
-            document.getElementById('activeName').innerText = item ? item.otherName : '';
-            document.getElementById('activeUni').innerText = '';
+            document.getElementById('activeAvatar').style.background = (item && item.otherBadgeGradient) || (otherProfile ? otherProfile.badgeGradient : '');
+            document.getElementById('activeName').innerText = item
+                ? `${item.otherName}${otherProfile && otherProfile.flag ? ' ' + otherProfile.flag : ''}` : '';
+            document.getElementById('activeUni').innerText = otherProfile
+                ? [otherProfile.university, otherProfile.major ? t(otherProfile.major) : ''].filter(Boolean).join(' · ') : '';
             document.getElementById('activeLocalTime').style.display = 'none';
             document.getElementById('msgHeaderActions').style.display = item ? 'block' : 'none';
+            const viewProfileBtn = document.getElementById('chatViewProfileBtn');
+            if (viewProfileBtn) viewProfileBtn.style.display = otherProfile ? 'inline-flex' : 'none';
 
             renderMessagesList();
             // 어느 쪽이었든 이전 채팅방/채널 구독은 확실히 끊고, 새로 고른 채팅방 종류에 맞는 구독을 시작한다.
@@ -4756,6 +4792,44 @@
             return (u && u.name) || 'Member';
         }
 
+        // 1:1 채팅방의 상대가 실제 유저(mock 아님)면, 카드 렌더링에 필요한 형태(realStudentToCard와
+        // 동일한 모양)로 프로필을 찾아 돌려준다. 채팅 헤더 보강과 프로필 배너가 이 함수 하나를 공유한다.
+        function otherRealProfileForChat(chatId, item) {
+            if (!chatId || isMockChatId(chatId) || !item || !item.otherUid) return null;
+            const u = (window.__REAL_STUDENTS || []).find(x => x.uid === item.otherUid);
+            return u ? realStudentToCard(u) : null;
+        }
+
+        // 대화방 헤더의 "프로필 보기" 버튼 — 기존 학생 프로필 모달을 그대로 재사용한다.
+        function viewCurrentChatProfile() {
+            if (!currentChatId || isMockChatId(currentChatId)) return;
+            const item = getAllChatsCombined().find(c => c.id === currentChatId);
+            if (!item || !item.otherUid) return;
+            openStudentProfile('real-' + item.otherUid);
+        }
+
+        // 대화 내역 맨 위에 고정으로 뜨는 상대방 미니 프로필 카드 — "이 사람이 누구인지" 한눈에
+        // 보여주는 LinkedIn/Read.cv 스타일의 소개 카드. 요청 카드와 달리 status와 무관하게(레거시
+        // 대화 포함) 상대가 실제 유저로 확인될 때는 항상 대화 맨 위에 붙어있는다.
+        function chatProfileBannerHTML(card) {
+            if (!card) return '';
+            const countryHTML = card.country
+                ? `<div class="chat-profile-banner-country">${escapeHTML(countryBadgeText(card.country))}</div>` : '';
+            const uniLine = [card.university, card.major ? t(card.major) : ''].filter(Boolean).join(' · ');
+            const sharedHTML = sharedDreamBadgeHTML(card)
+                || `<div class="shared-dream-badge">🎓 ${escapeHTML(t('두 분 모두 Unily 네트워크 소속이에요'))}</div>`;
+            return `
+              <div class="chat-profile-banner">
+                <div class="chat-profile-banner-avatar" style="background:${card.badgeGradient || ''}">${initialsOf(card.name)}</div>
+                <div class="chat-profile-banner-name">${escapeHTML(card.name)}</div>
+                ${countryHTML}
+                ${uniLine ? `<div class="chat-profile-banner-uni">${escapeHTML(uniLine)}</div>` : ''}
+                ${card.bio ? `<p class="chat-profile-banner-bio">${escapeHTML(t(card.bio))}</p>` : ''}
+                ${sharedHTML}
+                <button type="button" class="btn-reset chat-profile-banner-btn" onclick="viewCurrentChatProfile()">전체 프로필 보기</button>
+              </div>`;
+        }
+
         function renderChatArea(opts) {
             opts = opts || {};
             const chatBody = document.getElementById('chatBody');
@@ -4774,8 +4848,10 @@
             const myUid = window.__myUid ? window.__myUid() : null;
             const chatInfo = isChannel ? null : getAllChatsCombined().find(c => c.id === currentChatId);
             // chatInfo.status가 없는(레거시) 대화는 항상 "열려있는" 대화로 취급 — 카드도 안 뜨고 입력창도 항상 활성.
-            // 채널은 요청 카드 개념이 아예 없다(수락된 순간에만 생기고, 멤버만 애초에 들어올 수 있음).
+            // 채널은 요청 카드/프로필 배너 개념이 아예 없다(수락된 순간에만 생기고, 멤버만 애초에 들어올 수 있음).
             const requestCardHTML = chatInfo ? renderRequestCardHTML(chatInfo, myUid, messages.length === 0) : '';
+            // 프로필 배너는 status와 무관하게(레거시 대화 포함) 상대가 실제 유저로 확인되면 항상 뜬다.
+            const profileBannerHTML = chatInfo ? chatProfileBannerHTML(otherRealProfileForChat(currentChatId, chatInfo)) : '';
             updateChatInputGate(chatInfo, myUid);
 
             const prevScrollTop = chatBody.scrollTop;
@@ -4786,7 +4862,7 @@
                 // 요청 카드가 이미 상황을 설명해주므로, 카드가 뜨는 상태에서는 "메시지를 보내
                 // 대화를 시작해보세요" 같은 일반 빈 상태 문구를 같이 보여주면 오히려 혼란스럽다
                 // (특히 입력창이 막혀있는 수신자 입장에서 모순돼 보임).
-                chatBody.innerHTML = requestCardHTML || msgEmptyStateHTML();
+                chatBody.innerHTML = profileBannerHTML + requestCardHTML || msgEmptyStateHTML();
                 return;
             }
 
@@ -4875,7 +4951,7 @@
                 lastMsgTime = m.createdAt;
             });
 
-            chatBody.innerHTML = requestCardHTML + html;
+            chatBody.innerHTML = profileBannerHTML + requestCardHTML + html;
             queueMessageTranslations(messages);
 
             if (wasNearBottom) {
@@ -5771,8 +5847,22 @@
         /* ==================================================================
            MY UNILY (마이페이지) — 프로필 / 활동 / 저장한 글 / 프로필 수정 / 설정
            ================================================================== */
-        const HOME_COUNTRY_FLAGS = { "한국": "🇰🇷", "미국": "🇺🇸", "독일": "🇩🇪", "브라질": "🇧🇷", "캐나다": "🇨🇦", "싱가포르": "🇸🇬", "프랑스": "🇫🇷", "일본": "🇯🇵" };
+        const HOME_COUNTRY_FLAGS = { "한국": "🇰🇷", "미국": "🇺🇸", "독일": "🇩🇪", "브라질": "🇧🇷", "캐나다": "🇨🇦", "싱가포르": "🇸🇬", "프랑스": "🇫🇷", "일본": "🇯🇵", "영국": "🇬🇧", "중국": "🇨🇳" };
         function flagForCountry(name) { return HOME_COUNTRY_FLAGS[name] || ''; }
+
+        // HOME_COUNTRY_INFO/FLAGS는 국가명을 한국어 문자열로 관리해서(온보딩 국가 선택 드롭다운과
+        // 동일한 값), 채팅 헤더/프로필 배너에서 "KR 🇰🇷" 같은 국가코드+국기 배지를 보여주기 위한
+        // 별도의 작은 매핑. COUNTRIES(Dream Exchange용, ISO 코드 기준)와는 다른 어휘라 섞어 쓰면 안 됨.
+        const HOME_COUNTRY_CODES = { "한국": "KR", "미국": "US", "독일": "DE", "브라질": "BR", "캐나다": "CA", "싱가포르": "SG", "프랑스": "FR", "일본": "JP", "영국": "GB", "중국": "CN" };
+        function countryBadgeText(name) {
+            if (!name) return '';
+            const code = HOME_COUNTRY_CODES[name];
+            const flag = flagForCountry(name);
+            if (code && flag) return `${code} ${flag}`;
+            const info = HOME_COUNTRY_INFO[name];
+            const displayName = (info && (info.names[currentLang] || info.names.en)) || name;
+            return `${flag} ${displayName}`.trim();
+        }
 
         // 헤더 우측 버튼: 로그인 전엔 "학교 이메일로 시작하기"(마이페이지로 이동),
         // 로그인 후엔 "로그아웃" 버튼으로 바뀐다. "내 Unily"로 가는 길은 nav-links의
