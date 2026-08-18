@@ -980,6 +980,18 @@
     font-size: clamp(26px,4vw,32px); margin-bottom: 10px;
     animation: onboardingCelebrate .6s cubic-bezier(.34,1.56,.64,1);
   }
+  /* "참여 요청을 보냈습니다" 카드 — 상대 아바타 + 대기 상태를 LinkedIn류 "Invitation sent" 톤으로 보여준다. */
+  .request-card-sent-row { display: flex; align-items: flex-start; gap: 12px; text-align: left; }
+  .request-card-avatar {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; color: #fff; font-weight: 700;
+    font-size: 14px; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif;
+  }
+  .request-card-sent-body { min-width: 0; }
+  .request-card-sent-body .request-card-main { margin-bottom: 4px; }
+  .request-card-pending-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--indigo-deep);
+    margin-right: 6px; vertical-align: middle; animation: pulse 1.6s ease-in-out infinite;
+  }
 
   /* 대화방 맨 위에 고정으로 뜨는 상대방 미니 프로필 카드(LinkedIn/Read.cv 스타일 소개 카드).
      .request-card와 같은 카드 톤을 쓰되, 큰 아바타 중심으로 구성이 다르다. */
@@ -1396,6 +1408,8 @@
     background:#FF5D8F; border:2px solid #F7F5FC; color:#fff; font-size:10px; font-weight:700;
     display:flex; align-items:center; justify-content:center; line-height:1;
   }
+  /* 알림 배지는 숫자 카운트 대신 안읽음 여부만 나타내는 단순 점(dot)으로 표시한다. */
+  .msg-icon-badge.dot{ min-width:10px; width:10px; height:10px; padding:0; top:4px; right:4px; }
 
   /* 알림 드롭다운 — 다른 실제 유저가 나에게 Connect(대화 시작/프로젝트 참여 요청)를 보내면 뜬다.
      LinkedIn/Instagram류: 종 아이콘 아래 카드형 패널에 아바타 + 이름 + 학교·전공 + 시간을 나열. */
@@ -1841,7 +1855,7 @@
                 <div class="notif-icon-wrap">
                     <button type="button" class="notif-icon-btn icon-btn-tap" id="notifBellBtn" onclick="toggleNotifPanel(event)" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 6.5-2.5 8.5-2.5 8.5h17S18 14.5 18 8z" /><path d="M13.73 20.5a2 2 0 0 1-3.46 0" /></svg>
-                        <span class="msg-icon-badge" id="notifBadge" style="display:none;">0</span>
+                        <span class="msg-icon-badge dot" id="notifBadge" style="display:none;" aria-hidden="true"></span>
                     </button>
                     <div class="notif-dropdown" id="notifPanel" role="menu">
                         <div class="notif-dropdown-header" data-i18n="notif_title">알림</div>
@@ -4827,12 +4841,20 @@
                             </div>
                           </div>`;
                     }
-                    return `
-                      <div class="request-card">
-                        <div class="request-card-header">Project Join Request</div>
-                        <div class="request-card-main">[${escapeHTML(chat.projectTitle || '')}] 팀에 참여 요청을 보냈습니다.</div>
-                        <div class="request-card-status">${escapeHTML(chat.otherName || '')}님의 수락을 기다리는 중이에요.</div>
-                      </div>`;
+                    {
+                        const ownerInitial = (chat.otherName || '?').trim().charAt(0).toUpperCase() || '?';
+                        return `
+                          <div class="request-card">
+                            <div class="request-card-header">Project Join Request</div>
+                            <div class="request-card-sent-row">
+                              <span class="request-card-avatar" style="background:${gradientForUid(chat.otherUid)}">${escapeHTML(ownerInitial)}</span>
+                              <div class="request-card-sent-body">
+                                <div class="request-card-main">[${escapeHTML(chat.projectTitle || '')}] 팀에 참여 요청을 보냈습니다.</div>
+                                <div class="request-card-status"><span class="request-card-pending-dot"></span>${escapeHTML(chat.otherName || '')}님의 수락을 기다리는 중이에요 · ${relativeTimeLabel(chat.updatedAt)}</div>
+                              </div>
+                            </div>
+                          </div>`;
+                    }
                 }
                 if (isRecipient) {
                     return `
@@ -6527,6 +6549,20 @@
             const fn = NOTIF_CONNECT_TEXT[currentLang] || NOTIF_CONNECT_TEXT.en;
             return fn(name);
         }
+        // 프로젝트 "참여하기"로 온 알림은 어느 프로젝트인지 바로 알 수 있게 별도 문구를 쓴다.
+        const NOTIF_PROJECT_TEXT = {
+            ko: (n, t) => `${n}님이 [${t}] 팀 합류를 요청했어요`,
+            en: (n, t) => `${n} requested to join [${t}]`,
+            fr: (n, t) => `${n} a demandé à rejoindre [${t}]`,
+            es: (n, t) => `${n} solicitó unirse a [${t}]`,
+            de: (n, t) => `${n} hat beantragt, [${t}] beizutreten`,
+            ja: (n, t) => `${n}さんが[${t}]への参加を希望しました`,
+            'zh-CN': (n, t) => `${n}申请加入[${t}]`
+        };
+        function notifProjectText(name, title) {
+            const fn = NOTIF_PROJECT_TEXT[currentLang] || NOTIF_PROJECT_TEXT.en;
+            return fn(name, title || '');
+        }
         function notifEmptyText() {
             const d = { ko: '아직 알림이 없어요.', en: 'No notifications yet.', fr: 'Aucune notification pour le moment.', es: 'Todavía no hay notificaciones.', de: 'Noch keine Benachrichtigungen.', ja: 'まだ通知はありません。', 'zh-CN': '暂无通知。' };
             return d[currentLang] || d.en;
@@ -7765,12 +7801,7 @@
             const badge = document.getElementById('notifBadge');
             if (!badge) return;
             const unread = (window.__REAL_NOTIFICATIONS || []).filter(n => !n.read).length;
-            if (unread > 0) {
-                badge.textContent = unread > 9 ? '9+' : String(unread);
-                badge.style.display = 'flex';
-            } else {
-                badge.style.display = 'none';
-            }
+            badge.style.display = unread > 0 ? 'flex' : 'none';
         }
         // 로그인하지 않은 상태에서 알림 아이콘을 누르면 알림 내용 대신 로그인 유도 UI를 보여준다.
         function renderNotifLoginPrompt() {
@@ -7801,7 +7832,7 @@
               <button type="button" class="notif-item${n.read ? '' : ' unread'}" onclick="goToNotification('${n.id}', '${n.chatId || ''}')">
                 <span class="notif-item-avatar" style="background:${gradientForUid(n.actorUid)}">${escapeHTML(initial)}</span>
                 <span class="notif-item-body">
-                  <span class="notif-item-text">${escapeHTML(notifConnectText(n.actorName || ''))}</span>
+                  <span class="notif-item-text">${escapeHTML(n.type === 'project' ? notifProjectText(n.actorName || '', n.projectTitle || '') : notifConnectText(n.actorName || ''))}</span>
                   ${subLine ? `<span class="notif-item-sub">${escapeHTML(subLine)}</span>` : ''}
                   <span class="notif-item-time">${relativeTimeLabel(n.createdAt)}</span>
                 </span>
@@ -8917,7 +8948,7 @@
             projectOwnerUid: ownerUid,
             projectTitle: projectTitle || "",
           });
-          createConnectNotification(myUid, ownerUid, chatId).catch((err) =>
+          createConnectNotification(myUid, ownerUid, chatId, { type: "project", projectTitle }).catch((err) =>
             console.error("프로젝트 참여 요청 알림 생성 실패:", err)
           );
         } else {
@@ -8936,7 +8967,7 @@
           if (Object.keys(updates).length > 0) {
             await updateDoc(ref, updates);
             if (updates.status === "pending") {
-              createConnectNotification(myUid, ownerUid, chatId).catch((err) =>
+              createConnectNotification(myUid, ownerUid, chatId, { type: "project", projectTitle }).catch((err) =>
                 console.error("프로젝트 참여 요청 알림 생성 실패:", err)
               );
             }
@@ -9057,12 +9088,13 @@
          프로젝트 "참여하기"도 결국 같은 액션)를 보내면 만들어진다. mockChats 안 읽음 배지와
          똑같이, 로그인해 있는 동안은 페이지와 무관하게 항상 구독해서 헤더 종 배지가 항상 정확하게 한다.
          ================================================================== */
-      async function createConnectNotification(myUid, otherUid, chatId) {
+      async function createConnectNotification(myUid, otherUid, chatId, extra) {
         const meSnap = await getDoc(doc(db, "users", myUid));
         const me = meSnap.exists() ? meSnap.data() : {};
-        await addDoc(collection(db, "notifications"), {
+        const type = (extra && extra.type) || "connect";
+        const payload = {
           recipientUid: otherUid,
-          type: "connect",
+          type,
           actorUid: myUid,
           actorName: me.name || auth.currentUser.displayName || "",
           actorUniversity: me.university || "",
@@ -9070,7 +9102,9 @@
           chatId,
           read: false,
           createdAt: serverTimestamp(),
-        });
+        };
+        if (type === "project" && extra && extra.projectTitle) payload.projectTitle = extra.projectTitle;
+        await addDoc(collection(db, "notifications"), payload);
       }
 
       window.__REAL_NOTIFICATIONS = [];
@@ -9091,6 +9125,7 @@
               actorName: data.actorName || "",
               actorUniversity: data.actorUniversity || "",
               actorMajor: data.actorMajor || "",
+              projectTitle: data.projectTitle || null,
               chatId: data.chatId || null,
               read: !!data.read,
               createdAt: toMillis(data.createdAt),
