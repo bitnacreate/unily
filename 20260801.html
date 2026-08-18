@@ -9231,7 +9231,10 @@
           recipientUid: otherUid,
           type,
           actorUid: myUid,
-          actorName: me.name || auth.currentUser.displayName || "",
+          // Firestore 보안 규칙이 이제 이 값을 users/{myUid} 문서의 실제 name 필드와 정확히
+          // 대조해 신원 위조를 막는다(감사 결과 반영) — auth.currentUser.displayName으로
+          // 대체하면 그 값과 안 맞아 규칙에서 그대로 거부되므로, 대체 없이 프로필 값만 쓴다.
+          actorName: me.name || "",
           actorUniversity: me.university || "",
           actorMajor: me.major || "",
           chatId,
