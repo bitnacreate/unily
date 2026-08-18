@@ -799,7 +799,25 @@
     overflow-y: auto;
     flex: 1;
     min-height: 0; /* flex item이 내용 크기만큼 늘어나는 것을 막아 overflow-y:auto가 실제로 동작하게 함 */
+    display: flex;
+    flex-direction: column;
   }
+  /* 채널이 한두 개뿐이면 목록 아래로 사이드바 높이(680px 고정)만큼 빈 흰 공간이 휑하게 남는다 —
+     아무 설명 없는 빈 공간 대신, margin-top:auto로 그 공간에 "더 찾아보기" CTA를 붙박이로
+     내려서 채운다. 목록이 스크롤 될 만큼 길면 자연스럽게 맨 아래로 밀려나 마지막 항목
+     바로 뒤에 붙는다. */
+  .msg-channels-discover {
+    margin-top: auto; padding: 28px 20px; text-align: center;
+    border-top: 1px solid var(--line);
+  }
+  .msg-channels-discover-icon { font-size: 22px; margin-bottom: 8px; opacity: .7; }
+  .msg-channels-discover-title { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px; line-height: 1.5; }
+  .msg-channels-discover-btn {
+    border: 1px solid var(--line); background: #fff; color: var(--indigo-deep);
+    font-size: 12.5px; font-weight: 700; padding: 9px 18px; border-radius: 100px; cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .msg-channels-discover-btn:hover { background: var(--bg-alt); border-color: var(--indigo); }
   .msg-item {
     position: relative;
     padding: 16px 20px;
@@ -2255,6 +2273,10 @@
                         </button>
                     </div>
                 </div>
+                <!-- DM 탭의 "메시지 목록" 헤더와 짝을 이루는, 채널 탭 전용 헤더. dmListControls 통째로
+                     숨기는 switchMessagesTab의 기존 패턴을 그대로 따라 별도 엘리먼트로 분리해뒀다
+                     (전체를 안 숨기면 검색창/필터가 채널 탭에도 남아있게 됨). -->
+                <div class="msg-sidebar-header" id="channelsListHeader" style="display:none;" data-i18n="msg_channels_list_title">내 프로젝트 채널</div>
                 <div class="msg-list" id="msgList"></div>
                 <div class="msg-list" id="channelList" style="display:none;"></div>
             </div>
@@ -2765,6 +2787,7 @@
                 msg_page_title: "해외 대학생 메시지 함",
                 msg_page_desc: "전 세계 대학생들과 실시간으로 주고받은 대화 목록입니다. Instant 번역으로 편하게 대화해보세요.",
                 msg_list_title: "메시지 목록",
+                msg_channels_list_title: "내 프로젝트 채널",
                 msg_send: "전송",
                 msg_login_gate_title: "로그인이 필요해요",
                 msg_login_gate_subtitle: "전 세계 대학생들과 나눈 메시지를 보려면 먼저 로그인해주세요.",
@@ -2890,6 +2913,7 @@
                 msg_page_title: "Global Student Messages",
                 msg_page_desc: "Your direct messages with university students around the world. Enjoy seamless chat with Instant Translation.",
                 msg_list_title: "Messages",
+                msg_channels_list_title: "My Project Channels",
                 msg_send: "Send",
                 msg_login_gate_title: "Sign in required",
                 msg_login_gate_subtitle: "Sign in to see your messages with students around the world.",
@@ -4279,7 +4303,9 @@
             label_looking: { en: "Looking for teammates", ko: "팀원을 찾고 있어요", fr: "Recherche de coéquipiers", es: "Buscando compañeros de equipo", de: "Teammitglieder gesucht", ja: "チームメイトを探しています", "zh-CN": "寻找队友" },
             label_current: { en: "Current Project", ko: "진행 중인 프로젝트", fr: "Projet en cours", es: "Proyecto actual", de: "Aktuelles Projekt", ja: "進行中のプロジェクト", "zh-CN": "当前项目" },
             btn_join: { en: "Join Project", ko: "프로젝트 참여하기", fr: "Rejoindre le projet", es: "Unirse al proyecto", de: "Projekt beitreten", ja: "プロジェクトに参加", "zh-CN": "加入项目" },
-            btn_requested: { en: "Requested", ko: "신청 완료", fr: "Demande envoyée", es: "Solicitado", de: "Angefragt", ja: "申請済み", "zh-CN": "已申请" }
+            btn_requested: { en: "Requested", ko: "신청 완료", fr: "Demande envoyée", es: "Solicitado", de: "Angefragt", ja: "申請済み", "zh-CN": "已申请" },
+            channels_discover_title: { en: "Discover more projects", ko: "더 많은 프로젝트를 찾아보세요", fr: "Découvrir plus de projets", es: "Descubre más proyectos", de: "Weitere Projekte entdecken", ja: "他のプロジェクトを見つける", "zh-CN": "发现更多项目" },
+            channels_discover_cta: { en: "Explore projects", ko: "프로젝트 탐색하기", fr: "Explorer les projets", es: "Explorar proyectos", de: "Projekte durchsuchen", ja: "プロジェクトを探す", "zh-CN": "探索项目" }
         };
 
         function projectUIText(key) {
@@ -4590,6 +4616,7 @@
             document.getElementById('msgTabDm').classList.toggle('active', tab === 'dm');
             document.getElementById('msgTabChannels').classList.toggle('active', tab === 'channels');
             document.getElementById('dmListControls').style.display = tab === 'dm' ? '' : 'none';
+            document.getElementById('channelsListHeader').style.display = tab === 'channels' ? '' : 'none';
             document.getElementById('msgList').style.display = tab === 'dm' ? '' : 'none';
             document.getElementById('channelList').style.display = tab === 'channels' ? '' : 'none';
             if (tab === 'dm') renderMessagesList(); else renderChannelsList();
@@ -4601,6 +4628,7 @@
                 <div class="msg-empty-state-icon">📁</div>
                 <div class="msg-empty-state-title">참여 중인 프로젝트가 없습니다</div>
                 <div class="msg-empty-state-subtitle">프로젝트 참여 요청이 수락되면 여기에 전용 채널이 생겨요.</div>
+                <button type="button" class="msg-channels-discover-btn" style="margin-top:16px;" onclick="showPage('home'); location.href='#explore';">${escapeHTML(projectUIText('channels_discover_cta'))}</button>
               </div>
             `;
         }
@@ -4615,7 +4643,7 @@
                 listEl.innerHTML = channelsEmptyStateHTML();
                 return;
             }
-            listEl.innerHTML = channels.map(c => `
+            const itemsHTML = channels.map(c => `
                 <div class="msg-item ${c.id === currentChannelId ? 'active' : ''}" onclick="goToProjectChannel('${c.id}')">
                   <div class="msg-channel-icon">#</div>
                   <div class="msg-info">
@@ -4627,6 +4655,17 @@
                   </div>
                 </div>
             `).join('');
+            // 채널이 한두 개뿐이면 사이드바 고정 높이(680px) 아래로 아무 설명 없는 빈 공간이
+            // 남는다 — margin-top:auto로 이 CTA를 목록 컨테이너 맨 아래에 붙박이로 둬서
+            // 그 공간을 "더 찾아보기" 유도로 채운다(목록이 길면 스크롤 맨 끝으로 자연스럽게 밀려남).
+            const discoverHTML = `
+                <div class="msg-channels-discover">
+                  <div class="msg-channels-discover-icon">🧭</div>
+                  <div class="msg-channels-discover-title">${escapeHTML(projectUIText('channels_discover_title'))}</div>
+                  <button type="button" class="msg-channels-discover-btn" onclick="showPage('home'); location.href='#explore';">${escapeHTML(projectUIText('channels_discover_cta'))}</button>
+                </div>
+            `;
+            listEl.innerHTML = itemsHTML + discoverHTML;
         }
 
         function selectChat(chatId) {
