@@ -4914,6 +4914,55 @@
             return '';
         }
 
+        /* 이미 Connect로 연결돼 대화 중이던 사이(chat.status가 처음부터 'accepted')에 나중에 얹힌
+           프로젝트 참여 요청 카드. renderRequestCardHTML의 status/requestType 흐름과는 별개로,
+           projectRequestStatus 필드만 보고 판단한다 — 기존 대화를 pending으로 되돌리지 않기 위해
+           별도 필드를 쓰기 때문에(__fbRequestProjectJoin 참고), 렌더링도 분리했다. 대화 내용이
+           이미 있어도(noMessagesYet 여부와 무관하게) 항상 보여야 하므로 renderChatArea 양쪽
+           경로(빈 대화/메시지 있는 대화) 모두에서 호출된다. */
+        function renderProjectRequestBannerHTML(chat, myUid) {
+            if (!chat || !chat.projectRequestStatus) return '';
+            const isRecipient = chat.projectRequestedBy !== myUid;
+            if (chat.projectRequestStatus === 'pending') {
+                if (isRecipient) {
+                    return `
+                      <div class="request-card request-card-compact">
+                        <div class="request-card-header">Project Join Request</div>
+                        <div class="request-card-main">${escapeHTML(chat.otherName || '')}님이 [${escapeHTML(chat.projectTitle || '')}] 팀 합류를 희망합니다.</div>
+                        <div class="request-card-actions">
+                          <button type="button" class="btn-connect" onclick="respondToProjectRequest('${chat.id}', 'accepted')">팀원으로 수락</button>
+                          <button type="button" class="btn-reset" onclick="respondToProjectRequest('${chat.id}', 'declined')">거절하기</button>
+                        </div>
+                      </div>`;
+                }
+                const ownerInitial = (chat.otherName || '?').trim().charAt(0).toUpperCase() || '?';
+                return `
+                  <div class="request-card request-card-compact">
+                    <div class="request-card-sent-row">
+                      <span class="request-card-avatar" style="background:${gradientForUid(chat.otherUid)}">${escapeHTML(ownerInitial)}</span>
+                      <div class="request-card-sent-body">
+                        <div class="request-card-main">[${escapeHTML(chat.projectTitle || '')}] 팀에 참여 요청을 보냈습니다.</div>
+                        <div class="request-card-status"><span class="request-card-pending-dot"></span>${escapeHTML(chat.otherName || '')}님의 수락을 기다리는 중이에요.</div>
+                      </div>
+                    </div>
+                  </div>`;
+            }
+            if (chat.projectRequestStatus === 'accepted') {
+                const mainText = isRecipient
+                    ? `${escapeHTML(chat.otherName || '')}님이 팀에 합류했습니다`
+                    : `[${escapeHTML(chat.projectTitle || '')}] 팀에 합류했습니다`;
+                const channelBtn = chat.projectChannelId
+                    ? `<button type="button" class="btn-connect" style="margin-top:10px; width:100%;" onclick="goToProjectChannel('${chat.projectChannelId}')">채널로 이동하기</button>`
+                    : '';
+                return `
+                  <div class="request-card request-card-compact">
+                    <div class="request-card-status">${mainText}</div>
+                    ${channelBtn}
+                  </div>`;
+            }
+            return '';
+        }
+
         // "You're Connected!" 카드의 "💬 메시지 보내기" 버튼 — 채팅 입력창으로 포커스를 옮겨준다.
         function focusMessageInput() {
             const input = document.getElementById('msgInput');
@@ -5050,6 +5099,8 @@
             // chatInfo.status가 없는(레거시) 대화는 항상 "열려있는" 대화로 취급 — 카드도 안 뜨고 입력창도 항상 활성.
             // 채널은 요청 카드/프로필 배너 개념이 아예 없다(수락된 순간에만 생기고, 멤버만 애초에 들어올 수 있음).
             const requestCardHTML = chatInfo ? renderRequestCardHTML(chatInfo, myUid, messages.length === 0) : '';
+            // 이미 연결된 사이에 얹힌 프로젝트 참여 요청은 대화 내용 유무와 무관하게 항상 보여야 한다.
+            const projectBannerHTML = chatInfo ? renderProjectRequestBannerHTML(chatInfo, myUid) : '';
             // 프로필 배너는 status와 무관하게(레거시 대화 포함) 상대가 실제 유저로 확인되면 항상 뜬다.
             const profileBannerHTML = chatInfo ? chatProfileBannerHTML(otherRealProfileForChat(currentChatId, chatInfo)) : '';
             updateChatInputGate(chatInfo, myUid);
@@ -5062,7 +5113,7 @@
                 // 요청 카드가 이미 상황을 설명해주므로, 카드가 뜨는 상태에서는 "메시지를 보내
                 // 대화를 시작해보세요" 같은 일반 빈 상태 문구를 같이 보여주면 오히려 혼란스럽다
                 // (특히 입력창이 막혀있는 수신자 입장에서 모순돼 보임).
-                chatBody.innerHTML = profileBannerHTML + requestCardHTML || msgEmptyStateHTML();
+                chatBody.innerHTML = profileBannerHTML + requestCardHTML + projectBannerHTML || msgEmptyStateHTML();
                 return;
             }
 
@@ -5151,7 +5202,7 @@
                 lastMsgTime = m.createdAt;
             });
 
-            chatBody.innerHTML = profileBannerHTML + requestCardHTML + html;
+            chatBody.innerHTML = profileBannerHTML + requestCardHTML + projectBannerHTML + html;
             queueMessageTranslations(messages);
 
             if (wasNearBottom) {
@@ -8672,6 +8723,10 @@
                 projectOwnerUid: data.projectOwnerUid || null,
                 projectTitle: data.projectTitle || null,
                 projectChannelId: data.projectChannelId || null,
+                // 이미 Connect로 연결된(status가 처음부터 'accepted') 사이에 나중에 얹힌 프로젝트
+                // 참여 요청 — 위 requestType/status와 별개로 동작한다(renderProjectRequestBannerHTML 참고).
+                projectRequestStatus: data.projectRequestStatus || null,
+                projectRequestedBy: data.projectRequestedBy || null,
               };
             })
             .filter((c) => !c.deletedForMe && !myBlocked.includes(c.otherUid));
@@ -8979,10 +9034,18 @@
             updates.requestType = "project";
             updates.projectOwnerUid = ownerUid;
             updates.projectTitle = projectTitle || "";
+          } else if (data.status === "accepted" && data.projectRequestStatus !== "pending") {
+            // 이미 Connect로 연결돼 대화 중인 사이(status는 그대로 'accepted')에도 프로젝트
+            // 참여 요청은 보낼 수 있어야 한다. status/requestType을 건드리면 정상 대화가 다시
+            // "요청 대기" 상태로 막혀버리므로, 별도 필드(projectRequestStatus)로만 요청을 얹는다.
+            updates.projectRequestStatus = "pending";
+            updates.projectRequestedBy = myUid;
+            updates.projectOwnerUid = ownerUid;
+            updates.projectTitle = projectTitle || "";
           }
           if (Object.keys(updates).length > 0) {
             await updateDoc(ref, updates);
-            if (updates.status === "pending") {
+            if (updates.status === "pending" || updates.projectRequestStatus === "pending") {
               createConnectNotification(myUid, ownerUid, chatId, { type: "project", projectTitle }).catch((err) =>
                 console.error("프로젝트 참여 요청 알림 생성 실패:", err)
               );
@@ -8998,18 +9061,31 @@
       // "나중에 보기"는 이 함수를 아예 호출하지 않는다(클라이언트에서 그냥 아무것도 안 함).
       window.__fbRespondToProjectRequest = async function (chatId, decision) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        const myUid = auth.currentUser.uid; // 수락/거절 버튼을 누른 사람 = 프로젝트 소유자여야 함(카드도 그렇게만 보여줌)
+        const chatRef = doc(db, "chats", chatId);
+
         if (decision === "declined") {
-          await updateDoc(doc(db, "chats", chatId), { status: "declined" });
+          const snap = await getDoc(chatRef);
+          const data = snap.exists() ? snap.data() : {};
+          // 이미 연결돼 대화 중이던 사이에 얹힌 요청이면 projectRequestStatus만 거절 처리하고
+          // 원래 대화(status)는 그대로 열려있는 상태로 둔다.
+          if (data.status === "accepted" && data.projectRequestStatus) {
+            await updateDoc(chatRef, { projectRequestStatus: "declined" });
+          } else {
+            await updateDoc(chatRef, { status: "declined" });
+          }
           return;
         }
-        const myUid = auth.currentUser.uid; // 수락 버튼을 누른 사람 = 프로젝트 소유자여야 함(카드도 그렇게만 보여줌)
+
         await runTransaction(db, async (tx) => {
-          const chatRef = doc(db, "chats", chatId);
           const chatSnap = await tx.get(chatRef);
           if (!chatSnap.exists()) throw new Error("대화방을 찾을 수 없습니다.");
           const chatData = chatSnap.data();
           if (chatData.projectOwnerUid !== myUid) throw new Error("프로젝트 소유자만 수락할 수 있습니다.");
-          const requesterUid = chatData.requestedBy;
+          // 이미 연결된 사이에 얹힌 요청인지(projectRequestedBy) 아니면 처음부터 프로젝트
+          // 요청으로 시작된 대화인지(requestedBy)에 따라 요청자를 다르게 찾는다.
+          const usesLayeredRequest = chatData.status === "accepted" && !!chatData.projectRequestStatus;
+          const requesterUid = usesLayeredRequest ? chatData.projectRequestedBy : chatData.requestedBy;
           const channelId = myUid;
           const channelRef = doc(db, "projectChannels", channelId);
           const channelSnap = await tx.get(channelRef);
@@ -9024,7 +9100,11 @@
           } else if (!(channelSnap.data().memberUids || []).includes(requesterUid)) {
             tx.update(channelRef, { memberUids: arrayUnion(requesterUid), updatedAt: serverTimestamp() });
           }
-          tx.update(chatRef, { status: "accepted", projectChannelId: channelId });
+          if (usesLayeredRequest) {
+            tx.update(chatRef, { projectRequestStatus: "accepted", projectChannelId: channelId });
+          } else {
+            tx.update(chatRef, { status: "accepted", projectChannelId: channelId });
+          }
         });
       };
 
