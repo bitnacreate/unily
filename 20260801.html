@@ -4,6 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Unily — 전 세계 대학생 매칭 플랫폼</title>
+<meta name="description" content="전 세계 대학생들과 연결되는 글로벌 네트워킹 플랫폼. AI 실시간 번역으로 언어 장벽 없이 대화하고 함께 프로젝트를 진행해보세요.">
+
+<!-- 파비콘 — 헤더의 .brand-mark(보라→민트 그라데이션 + 흰 링)와 완전히 같은 SVG를 그대로 재사용.
+     최신 브라우저는 SVG favicon을 지원하니 벡터로 선명하게, 구형 브라우저용으로 PNG를 fallback으로 둔다. -->
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#7A70F2">
+
+<!-- 소셜 공유 미리보기(카카오톡/트위터/슬랙 등에 링크 붙였을 때 카드로 표시됨) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Unily">
+<meta property="og:title" content="Unily — 전 세계 대학생 매칭 플랫폼">
+<meta property="og:description" content="전 세계 대학생들과 연결되는 글로벌 네트워킹 플랫폼. AI 실시간 번역으로 언어 장벽 없이 대화하고 함께 프로젝트를 진행해보세요.">
+<meta property="og:image" content="https://unily-e973f.web.app/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Unily — 전 세계 대학생 매칭 플랫폼">
+<meta name="twitter:description" content="전 세계 대학생들과 연결되는 글로벌 네트워킹 플랫폼.">
+<meta name="twitter:image" content="https://unily-e973f.web.app/icon-512.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!-- Google Identity Services SDK: 실제 구글 소셜 로그인에 사용 -->
@@ -131,6 +152,11 @@
     .trans-btns{
       flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
       scrollbar-width:none; padding-bottom:1px;
+      /* flex 아이템은 기본 min-width:auto라 콘텐츠(언어 버튼 7개)의 원래 폭만큼 부모를
+         밀어내 버려서, overflow-x:auto가 있어도 페이지 전체가 가로로 살짝 밀리는 문제가
+         있었다(360px 폭에서 6px 오버플로우로 실제 발생 확인). min-width:0으로 줄어들 수
+         있게 해줘야 overflow-x:auto가 부모 폭 안에서 실제로 스크롤을 맡는다. */
+      min-width:0;
     }
     .trans-btns::-webkit-scrollbar{ display:none; }
     .btn-lang{ flex-shrink:0; padding:5px 10px; font-size:11.5px; }
@@ -212,7 +238,13 @@
      (.nav-right-actions의 gap 축소는 아래 1340번째 줄 부근 기본 정의보다 뒤에 와야
      적용되므로 그 규칙 바로 밑에 따로 둔다 — 동일 명시도에서는 소스 순서상 나중 규칙이 이긴다.) */
   @media (max-width:420px){
-    .nav-cta{ font-size:10px; padding:6px 8px; letter-spacing:-0.3px; }
+    /* font-size를 계속 줄이는 것만으로는 폰트 로딩 실패(대체 폰트로 렌더링) 시 글자 폭이
+       달라져서 다시 넘칠 수 있다(실제로 자동화 테스트에서 재현됨) — max-width+ellipsis로
+       어떤 폰트가 쓰이든 이 버튼이 절대 헤더 폭을 밀어내지 못하게 상한선을 둔다. */
+    .nav-cta{
+      font-size:10px; padding:6px 8px; letter-spacing:-0.3px;
+      max-width:104px; overflow:hidden; text-overflow:ellipsis; flex-shrink:1; min-width:0;
+    }
   }
 
   /* ---------- HERO ---------- */
@@ -3003,9 +3035,21 @@
             if (translationCache[targetLang][text] !== undefined) {
                 return translationCache[targetLang][text];
             }
+            // 다른 유저(또는 이전 세션)가 이미 같은 문장을 이 언어로 번역해뒀다면 그걸 재사용하고
+            // Gemini는 아예 부르지 않는다 — 실패해도(비로그인 등) 조용히 넘어가고 평소대로 진행.
+            if (window.__fbGetCachedTranslation) {
+                try {
+                    const shared = await window.__fbGetCachedTranslation(targetLang, text);
+                    if (shared) {
+                        translationCache[targetLang][text] = shared;
+                        return shared;
+                    }
+                } catch (err) { /* 캐시 조회 실패는 무시 */ }
+            }
             try {
                 if (!window.__aiTranslate) throw new Error('AI translate not ready');
                 translationCache[targetLang][text] = await window.__aiTranslate(text, 'auto', targetLang);
+                if (window.__fbSetCachedTranslation) window.__fbSetCachedTranslation(targetLang, text, translationCache[targetLang][text]);
                 return translationCache[targetLang][text];
             } catch (err) {
                 console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
@@ -3018,6 +3062,7 @@
                 const data = await res.json();
                 const translated = (data[0] || []).map(chunk => chunk[0]).join('');
                 translationCache[targetLang][text] = translated || text;
+                if (translated && window.__fbSetCachedTranslation) window.__fbSetCachedTranslation(targetLang, text, translated);
                 return translationCache[targetLang][text];
             } catch (err) {
                 return text; // 둘 다 실패하면 원문 유지 (캐시엔 저장하지 않아 다음에 다시 시도됨)
@@ -3213,12 +3258,22 @@
             }
         }
 
+        // 에러 메시지를 GA4 "exception" 이벤트 형식(description/fatal)으로 Analytics에 남긴다.
+        // window.__logAnalyticsEvent는 모듈 스크립트(하단)가 준비돼야 생기므로, 그 전에 에러가
+        // 나도(초기 로딩 단계) 죽지 않도록 존재 여부를 확인하고 부른다.
+        function reportErrorToAnalytics(reason) {
+            if (!window.__logAnalyticsEvent) return;
+            const description = String((reason && (reason.stack || reason.message)) || reason || '').slice(0, 500);
+            window.__logAnalyticsEvent('exception', { description, fatal: false });
+        }
         window.addEventListener('error', (e) => {
             console.error('전역 에러:', e.error || e.message);
+            reportErrorToAnalytics(e.error || e.message);
             showGlobalErrorToast(e.error);
         });
         window.addEventListener('unhandledrejection', (e) => {
             console.error('처리되지 않은 Promise 거부:', e.reason);
+            reportErrorToAnalytics(e.reason);
             showGlobalErrorToast(e.reason);
         });
         window.addEventListener('offline', () => {
@@ -8157,7 +8212,8 @@
     <script type="module">
       // Import the functions you need from the SDKs you need
       import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
-      import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-analytics.js";
+      import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-analytics.js";
+      import { getPerformance } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-performance.js";
       import {
         initializeAppCheck,
         ReCaptchaEnterpriseProvider,
@@ -8214,6 +8270,17 @@
       // Initialize Firebase
       const app = initializeApp(firebaseConfig);
       const analytics = getAnalytics(app);
+      // Performance Monitoring: 별도 계정/설정 없이 같은 Firebase 프로젝트에 바로 붙는다.
+      // 페이지 로드·네트워크 요청 시간을 자동으로 수집해 Firebase 콘솔의 Performance 탭에서 볼 수 있다.
+      getPerformance(app);
+
+      // classic(non-module) 스크립트의 전역 에러 핸들러(window.addEventListener('error'/'unhandledrejection'))가
+      // 지금까진 토스트만 띄우고 콘솔에만 남겨서, 실사용자가 겪는 에러를 개발자가 전혀 알 수 없었다.
+      // GA4 표준 "exception" 이벤트 스키마(description/fatal)로 Analytics에 남겨서 Firebase 콘솔에서
+      // 실사용자 에러를 나중에라도 확인할 수 있게 한다.
+      window.__logAnalyticsEvent = function (name, params) {
+        try { logEvent(analytics, name, params); } catch (e) { /* Analytics 자체 실패는 무시 */ }
+      };
 
       /* ==================================================================
          App Check: 보류 상태로 되돌림.
@@ -8316,6 +8383,40 @@
             `Output ONLY the translated text, with no quotes, labels, or explanation.\n\n${text}`;
         const result = await translateModel.generateContent(prompt);
         return result.response.text().trim();
+      };
+
+      /* ==================================================================
+         번역 결과 공유 캐시 (Firestore translationCache/{lang}/strings/{hash})
+         지금까진 ko/en을 뺀 5개 언어가 매 세션(브라우저 새로고침마다) 같은 UI 문구를 Gemini로
+         다시 번역했다 — 유저가 늘수록 "이미 다른 유저가 번역해본 문장"을 계속 재번역하는
+         비용/지연 낭비가 커진다. 한 번 번역된 문장은 Firestore에 저장해두고, 다음엔 아무나
+         (같은 유저든 다른 유저든) Gemini를 다시 부르지 않고 재사용하게 한다.
+         문서 ID는 원문 텍스트를 그대로 쓸 수 없어서(슬래시·길이 제한) FNV-1a 해시로 축약한다.
+         ================================================================== */
+      function fnv1aHash(str) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = Math.imul(h, 0x01000193);
+        }
+        return (h >>> 0).toString(16).padStart(8, "0");
+      }
+      window.__fbGetCachedTranslation = async function (lang, text) {
+        const snap = await getDoc(doc(db, "translationCache", lang, "strings", fnv1aHash(text)));
+        return snap.exists() ? snap.data().translated : null;
+      };
+      // 캐시 기여는 로그인한 유저만(규칙도 동일하게 강제) — 비로그인 방문자는 캐시를 읽기만 하고,
+      // 새로 번역된 문장은 로그인한 누군가가 그 언어로 방문할 때 자연스럽게 채워진다.
+      // 실패해도(네트워크 문제 등) 화면엔 이미 번역문을 보여준 뒤라 조용히 무시한다.
+      window.__fbSetCachedTranslation = async function (lang, text, translated) {
+        if (!auth.currentUser || !translated) return;
+        try {
+          await setDoc(doc(db, "translationCache", lang, "strings", fnv1aHash(text)), {
+            text,
+            translated,
+            createdAt: serverTimestamp(),
+          });
+        } catch (err) { /* 이미 존재하면(동시에 두 유저가 같은 문장을 처음 번역) create 규칙 위반으로 조용히 실패 — 의도된 동작 */ }
       };
 
       // handleCredentialResponse(위쪽 스크립트)에서 구글 로그인 성공 시 호출됨:
