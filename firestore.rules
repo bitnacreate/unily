@@ -154,7 +154,12 @@ service cloud.firestore {
     match /projectChannels/{channelId} {
       // 프로젝트 참여 요청이 수락됐을 때만 생기는 다인 그룹 채널. channelId는 프로젝트 소유자의
       // uid를 그대로 쓴다(지금 데이터 모델상 한 유저가 동시에 하나의 모집 프로젝트만 가지므로).
-      allow read: if request.auth != null && request.auth.uid in resource.data.memberUids;
+      // resource == null 허용: __fbRespondToProjectRequest가 채널을 새로 만들기 전에 트랜잭션
+      // 안에서 getDoc()으로 존재 여부부터 확인하는데, 문서가 아직 없으면 resource가 null이라
+      // resource.data 접근 자체가 거부돼서 첫 수락(=채널이 처음 생기는 순간)마다 "처리에
+      // 실패했어요" 에러로 이어지던 버그(chats 컬렉션에서 이미 겪었던 것과 동일한 패턴).
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.memberUids);
 
       // 생성은 오직 소유자 본인만, 처음엔 소유자+새로 수락된 멤버 정확히 2명으로 시작.
       allow create: if request.auth != null
