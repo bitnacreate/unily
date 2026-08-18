@@ -8185,9 +8185,11 @@
         if (auth.currentUser) {
           if (window.__subscribeMockChatList) window.__subscribeMockChatList();
           if (window.__subscribeNotifications) window.__subscribeNotifications();
+          if (window.__subscribeRealStudents) window.__subscribeRealStudents();
         } else {
           if (window.__unsubscribeMockChatList) window.__unsubscribeMockChatList();
           if (window.__unsubscribeNotifications) window.__unsubscribeNotifications();
+          if (window.__unsubscribeRealStudents) window.__unsubscribeRealStudents();
           // 실제 1:1 대화 목록/채팅방 구독도 여기서 반드시 같이 끊어야 한다 — 기존에는 메시지함
           // 화면을 벗어날 때(showPage)만 해제됐어서, 마이페이지 등 다른 화면에서 로그아웃하면
           // __CHATS에 이전 로그인 사용자의 대화 목록이 그대로 남아 있었다(로그아웃 상태에서
@@ -8414,16 +8416,30 @@
          - 클래식 스크립트(realStudentToCard)가 이 배열을 목업 students 배열과 합쳐서 카드로 그린다.
          ================================================================== */
       window.__REAL_STUDENTS = [];
-      onSnapshot(
-        query(collection(db, "users"), where("onboardingComplete", "==", true), orderBy("onboardingCompletedAt", "desc")),
-        (snap) => {
-          window.__REAL_STUDENTS = snap.docs.map((d) => {
-            const data = d.data();
-            return { ...data, uid: d.id, onboardingCompletedAt: toMillis(data.onboardingCompletedAt) };
-          });
-          if (typeof window.__onRealStudentsChange === "function") window.__onRealStudentsChange();
-        }
-      );
+      let unsubRealStudents = null;
+      // 다른 실시간 구독(알림/채팅/채널)과 마찬가지로 로그인 상태에서만 구독한다. 예전에는
+      // 로그인 여부와 무관하게 페이지 로드 즉시 구독을 걸었는데, users 컬렉션은 로그인해야
+      // 읽을 수 있어서 Auth 세션 복원이 끝나기 전에 이 요청이 먼저 나가면 permission-denied로
+      // 조용히 실패하고, 그 뒤로 재시도가 없어 탐색 탭에 실제 유저가 계속 안 뜨는 버그가 있었다.
+      window.__subscribeRealStudents = function () {
+        if (unsubRealStudents || !auth.currentUser) return;
+        unsubRealStudents = onSnapshot(
+          query(collection(db, "users"), where("onboardingComplete", "==", true), orderBy("onboardingCompletedAt", "desc")),
+          (snap) => {
+            window.__REAL_STUDENTS = snap.docs.map((d) => {
+              const data = d.data();
+              return { ...data, uid: d.id, onboardingCompletedAt: toMillis(data.onboardingCompletedAt) };
+            });
+            if (typeof window.__onRealStudentsChange === "function") window.__onRealStudentsChange();
+          },
+          (err) => console.error("탐색 탭 실제 유저 목록 구독 실패:", err)
+        );
+      };
+      window.__unsubscribeRealStudents = function () {
+        if (unsubRealStudents) { unsubRealStudents(); unsubRealStudents = null; }
+        window.__REAL_STUDENTS = [];
+        if (typeof window.__onRealStudentsChange === "function") window.__onRealStudentsChange();
+      };
 
       window.__fbCreatePost = async function (post) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
