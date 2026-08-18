@@ -1264,6 +1264,16 @@
   .legal-modal-body h4:first-child { margin-top: 0; }
   .legal-modal-body p { margin: 0 0 10px; }
   .legal-modal-body ul { margin: 0 0 10px; padding-left: 20px; }
+  .legal-updated { font-size: 11.5px; color: var(--ink-faint, var(--ink-soft)); margin-bottom: 14px; }
+  .legal-toc {
+    background: var(--bg-alt); border: 1px solid var(--line); border-radius: var(--radius-md);
+    padding: 14px 16px; margin-bottom: 22px;
+  }
+  .legal-toc-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--indigo-deep); margin-bottom: 8px; }
+  .legal-toc ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 16px; }
+  .legal-toc li { break-inside: avoid; }
+  .legal-toc a { display: block; padding: 3px 0; font-size: 12.5px; color: var(--ink-soft); text-decoration: none; }
+  .legal-toc a:hover { color: var(--indigo-deep); text-decoration: underline; }
   .legal-modal-footer { padding: 16px 26px; border-top: 1px solid var(--line); flex-shrink: 0; }
   /* 인증 대학 목록 모달 — .legal-modal 구조(헤더+스크롤 본문)를 그대로 쓰되, 검색/필터 컨트롤 줄과
      학교 1,200개를 배치 단위로 그리는 목록 영역을 추가한다. */
@@ -1292,6 +1302,7 @@
     .uni-directory-controls .select-wrap { width: 100%; }
     .legal-modal-header, .legal-modal-body, .legal-modal-footer, .uni-directory-controls { padding-left: 18px; padding-right: 18px; }
     .uni-directory-item { padding-left: 18px; padding-right: 18px; }
+    .legal-toc ul { columns: 1; }
   }
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink-soft); }
@@ -1404,6 +1415,12 @@
   footer{ border-top:1px solid var(--line); padding:44px 0; background: #fff; }
   .footer-inner{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
   .footer-links{ display:flex; gap:26px; font-size:13.5px; color:var(--ink-soft); font-weight:500; }
+  .footer-links a{ color:inherit; text-decoration:none; }
+  .footer-links a:hover{ color:var(--ink); text-decoration:underline; }
+  .footer-lang-select{
+    padding:6px 26px 6px 10px; border-radius:var(--radius-md); border:1px solid var(--line);
+    background:var(--bg-alt); color:var(--ink-soft); font-size:12.5px; cursor:pointer; appearance:auto;
+  }
   .footer-copy{ font-size:13px; color:var(--ink-soft); }
 
   @media (max-width:960px){
@@ -2726,10 +2743,19 @@
         <div class="wrap footer-inner">
             <a onclick="showPage('home')" class="brand"><span class="brand-mark"></span>Unily</a>
             <div class="footer-links">
-                <a href="#">Privacy Policy</a>
-                <a href="#">Terms of Service</a>
-                <a href="#">Contact</a>
+                <a href="#" onclick="event.preventDefault(); openLegalModal('privacy');" data-i18n="legal_privacy_title">개인정보처리방침</a>
+                <a href="#" onclick="event.preventDefault(); openLegalModal('terms');" data-i18n="legal_terms_title">이용약관</a>
+                <a href="mailto:beaahope9@gmail.com" data-i18n="footer_contact">문의하기</a>
             </div>
+            <select class="footer-lang-select" id="footerLangSelect" aria-label="Language" onchange="switchLanguage(this.value)">
+                <option value="ko">한국어</option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+                <option value="de">Deutsch</option>
+                <option value="ja">日本語</option>
+                <option value="zh-CN">中文</option>
+            </select>
             <div class="footer-copy">© 2026 Unily. All rights reserved.</div>
         </div>
     </footer>
@@ -2831,6 +2857,9 @@
                 legal_terms_title: "이용약관",
                 legal_privacy_title: "개인정보처리방침",
                 legal_modal_close_btn: "확인했습니다",
+                legal_toc_title: "목차",
+                legal_last_updated: "최종 수정일",
+                footer_contact: "문의하기",
                 verified_status_label: "학교 이메일 등록 상태:",
                 verified_status_value: "등록됨",
                 profile_logout_btn: "로그아웃 (Logout)",
@@ -2957,6 +2986,9 @@
                 legal_terms_title: "Terms of Service",
                 legal_privacy_title: "Privacy Policy",
                 legal_modal_close_btn: "Got it",
+                legal_toc_title: "Contents",
+                legal_last_updated: "Last Updated",
+                footer_contact: "Contact",
                 verified_status_label: "School Email Status:",
                 verified_status_value: "Registered",
                 profile_logout_btn: "Log Out",
@@ -3022,6 +3054,17 @@
             if (currentLang === 'ko') return text;
             const cached = translationCache[currentLang] && translationCache[currentLang][text];
             return cached !== undefined ? cached : text;
+        }
+
+        // data-i18n 키 하나를 지금 언어의 텍스트로 바로 바꿔준다 — applyStaticDictionary가 DOM을
+        // 훑을 때 쓰는 것과 같은 규칙(ko/en은 정적 사전, 그 외 언어는 한국어 원문을 t()로 조회)을
+        // DOM 요소 없이도(모달 안 innerHTML을 만드는 등) 쓸 수 있게 뺀 것.
+        function tKey(key) {
+            const koSource = translations.ko[key];
+            if (koSource === undefined) return key;
+            if (currentLang === 'ko') return koSource;
+            if (currentLang === 'en' && translations.en[key] !== undefined) return translations.en[key];
+            return t(stripHtml(koSource));
         }
 
         // 문장 하나를 번역해서 캐시에 저장 (이미 캐시에 있으면 네트워크 요청 없이 바로 반환)
@@ -3181,6 +3224,10 @@
             currentLang = langCode;
             document.querySelectorAll('.btn-lang').forEach(btn => btn.classList.remove('active'));
             if (btnEl) btnEl.classList.add('active');
+            // 상단 언어 버튼과 푸터 언어 선택창은 같은 상태를 공유해야 하므로, 어느 쪽에서
+            // 바꾸든 나머지 하나도 항상 값이 맞게 동기화한다.
+            const footerSelect = document.getElementById('footerLangSelect');
+            if (footerSelect && footerSelect.value !== langCode) footerSelect.value = langCode;
 
             if (langCode !== 'ko') {
                 const allTexts = collectAllTranslatableTexts();
@@ -5373,7 +5420,7 @@
         /* ---------- 이용약관 / 개인정보처리방침 (표준 템플릿 문구) ---------- */
         const LEGAL_DOCS = {
             terms: {
-                title: '이용약관',
+                updatedAt: '2026-08-05',
                 html: `
                     <h4>제1조 (목적)</h4>
                     <p>이 약관은 Unily(이하 "서비스")가 제공하는 전 세계 대학생 커뮤니티 및 메시징 서비스의 이용 조건과 절차, 이용자와 서비스 운영자의 권리·의무 및 책임사항을 정함을 목적으로 합니다.</p>
@@ -5407,7 +5454,7 @@
                 `
             },
             privacy: {
-                title: '개인정보처리방침',
+                updatedAt: '2026-08-05',
                 html: `
                     <p>Unily(이하 "서비스")는 이용자의 개인정보를 중요하게 생각하며, 관련 법령을 준수하기 위해 노력합니다.</p>
                     <h4>1. 수집하는 개인정보 항목</h4>
@@ -5455,9 +5502,38 @@
         function openLegalModal(kind) {
             const doc = LEGAL_DOCS[kind];
             if (!doc) return;
-            document.getElementById('legalModalTitle').textContent = doc.title;
-            document.getElementById('legalModalBody').innerHTML = doc.html;
+            const titleKey = kind === 'terms' ? 'legal_terms_title' : 'legal_privacy_title';
+            document.getElementById('legalModalTitle').textContent = tKey(titleKey);
+            const bodyEl = document.getElementById('legalModalBody');
+            bodyEl.innerHTML = legalBodyHTML(doc);
+            bodyEl.scrollTop = 0;
             document.getElementById('legalModalOverlay').classList.add('active');
+        }
+        // 조항이 많은 문서(8개 조/섹션)를 스크롤만으로 훑기 힘들어서, 본문의 h4 제목들로
+        // 클릭하면 그 자리로 스크롤되는 목차를 자동으로 만들어 상단에 붙인다 — 목차를 손으로
+        // 따로 관리하지 않아도 LEGAL_DOCS의 html만 보고 항상 정확하게 맞는다.
+        function legalBodyHTML(doc) {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = doc.html;
+            const headings = Array.from(wrapper.querySelectorAll('h4'));
+            const tocItemsHTML = headings.map((h, i) => {
+                const id = `legal-sec-${i}`;
+                h.id = id;
+                return `<li><a href="#${id}" onclick="event.preventDefault(); scrollLegalSection('${id}');">${escapeHTML(h.textContent)}</a></li>`;
+            }).join('');
+            const tocHTML = tocItemsHTML
+                ? `<nav class="legal-toc"><div class="legal-toc-title">${escapeHTML(tKey('legal_toc_title'))}</div><ul>${tocItemsHTML}</ul></nav>`
+                : '';
+            const updatedHTML = doc.updatedAt
+                ? `<div class="legal-updated">${escapeHTML(tKey('legal_last_updated'))}: ${escapeHTML(doc.updatedAt)}</div>`
+                : '';
+            return updatedHTML + tocHTML + wrapper.innerHTML;
+        }
+        function scrollLegalSection(id) {
+            const bodyEl = document.getElementById('legalModalBody');
+            const target = document.getElementById(id);
+            if (!bodyEl || !target) return;
+            bodyEl.scrollTo({ top: target.offsetTop - 8, behavior: 'smooth' });
         }
         function closeLegalModal() {
             document.getElementById('legalModalOverlay').classList.remove('active');
