@@ -3580,10 +3580,13 @@
         // 문서가 아님)은 병합 시점에 isAiGenerated: true를 붙여 카드에 "AI 프로필" 배지가 뜨게 한다.
         function allStudentCards() {
             const myUid = window.__myUid ? window.__myUid() : null;
+            const myBlocked = window.__myBlockedUids || [];
             const realCards = (window.__REAL_STUDENTS || [])
                 // 본인 카드는 원래도 제외했고, 마이페이지에서 "비공개"로 설정한 유저도 탐색 탭에서 빠진다.
                 // profileVisible 필드가 아예 없는(이 기능 이전에 온보딩한) 유저는 기본값 공개로 취급한다.
-                .filter(u => u.uid !== myUid && u.profileVisible !== false)
+                // 차단한 유저도 여기서 빠져야 한다 — Connect/참여 요청 자체는 서버에서도 막지만,
+                // 카드가 계속 탐색 탭에 보이면 차단한 의미가 없다(메시지함 목록에서는 이미 걸러지고 있었음).
+                .filter(u => u.uid !== myUid && u.profileVisible !== false && !myBlocked.includes(u.uid))
                 .map(realStudentToCard);
             const mockCards = students.map(s => ({ ...s, isAiGenerated: true }));
             return [...realCards, ...mockCards];
@@ -4931,7 +4934,7 @@
                             <div class="request-card-sub">요청을 수락하면 프로젝트 전용 채널 및 워크스페이스 권한이 부여됩니다.</div>
                             <div class="request-card-actions">
                               <button type="button" class="btn-connect" onclick="respondToProjectRequest('${chat.id}', 'accepted')">팀원으로 수락</button>
-                              <button type="button" class="btn-reset" onclick="respondToProjectRequest('${chat.id}', 'later')">나중에 보기</button>
+                              <button type="button" class="btn-reset" onclick="respondToProjectRequest('${chat.id}', 'declined')">거절하기</button>
                             </div>
                           </div>`;
                     }
@@ -5082,13 +5085,7 @@
             renderMessagesList();
         }
 
-        // "나중에 보기"는 아무 것도 저장하지 않는다 — 요청은 그대로 pending으로 남아서, 다음에
-        // 이 대화방을 다시 열면 똑같은 카드가 또 뜬다(수락/거절만 서버에 실제로 반영됨).
         async function respondToProjectRequest(chatId, decision) {
-            if (decision === 'later') {
-                showToast(await translateText('나중에 다시 확인하실 수 있어요.', currentLang));
-                return;
-            }
             if (!window.__fbRespondToProjectRequest) return;
             try {
                 await window.__fbRespondToProjectRequest(chatId, decision);
@@ -9198,7 +9195,6 @@
       // 프로젝트 참여 요청의 수락/거절. 'declined'는 Connect와 동일하게 status만 바꾸면 끝이지만,
       // 'accepted'는 프로젝트 채널(projectChannels/{ownerUid})을 새로 만들거나 멤버를 추가해야 하므로
       // 트랜잭션으로 묶는다 — 채널 생성/합류와 채팅방 status 갱신이 항상 함께 성공/실패하게 하기 위함.
-      // "나중에 보기"는 이 함수를 아예 호출하지 않는다(클라이언트에서 그냥 아무것도 안 함).
       window.__fbRespondToProjectRequest = async function (chatId, decision) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
         const myUid = auth.currentUser.uid; // 수락/거절 버튼을 누른 사람 = 프로젝트 소유자여야 함(카드도 그렇게만 보여줌)
