@@ -1304,6 +1304,30 @@
     .uni-directory-item { padding-left: 18px; padding-right: 18px; }
     .legal-toc ul { columns: 1; }
   }
+
+  /* 연결된 국가 모달 — .legal-modal 구조는 그대로, 목록 대신 반응형 카드 그리드로 보여준다. */
+  .country-directory-modal { max-width: 620px; }
+  .country-directory-grid {
+    overflow-y: auto; flex: 1; padding: 18px 26px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+  }
+  .country-card {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+    padding: 16px 10px; border: 1px solid var(--line); border-radius: var(--radius-md);
+    background: var(--bg-alt); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .country-card:hover {
+    transform: translateY(-2px); border-color: var(--indigo);
+    box-shadow: 0 10px 22px -12px rgba(90,70,220,.35);
+  }
+  .country-card-flag { font-size: 28px; line-height: 1; }
+  .country-card-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .country-card-count { font-size: 11.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .country-directory-empty { padding: 40px 26px; text-align: center; font-size: 13px; color: var(--ink-soft); grid-column: 1 / -1; }
+  @media (max-width: 600px) {
+    .country-directory-grid { padding: 14px 18px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  }
+
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink-soft); }
   .form-control {
@@ -1986,7 +2010,14 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="stat"><div class="stat-num">88K</div><div class="stat-label" data-i18n="stat_3">활성 학생</div></div>
+                        <div class="stat stat-uni-hover" id="countryHoverTrigger" onclick="openCountryDirectory()" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="연결된 국가 목록 보기" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); this.click();}">
+                            <div class="stat-num">20</div>
+                            <div class="stat-label" data-i18n="stat_3">연결된 국가</div>
+                            <div class="stat-hover-popover" role="tooltip">
+                                <svg class="stat-popover-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+                                <span data-i18n="country_directory_hover_cta">클릭해서 연결된 국가 둘러보기</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2739,6 +2770,24 @@
         </div>
     </div>
 
+    <!-- 연결된 국가 목록 모달 — 히어로 "연결된 국가" 통계 클릭 시 열린다. .legal-modal 구조를
+         그대로 재사용해 다른 모달들과 디자인 토큰(배경/테두리/애니메이션 등)을 완전히 통일한다. -->
+    <div class="legal-modal-overlay" id="countryDirectoryOverlay" onclick="if(event.target === this) closeCountryDirectory()">
+        <div class="legal-modal country-directory-modal">
+            <div class="legal-modal-header">
+                <div>
+                    <h3 data-i18n="country_directory_title">연결된 국가</h3>
+                    <p class="uni-directory-count" id="countryDirectoryCount"></p>
+                </div>
+                <button type="button" class="legal-modal-close icon-btn-tap" onclick="closeCountryDirectory()" aria-label="닫기">✕</button>
+            </div>
+            <div class="uni-directory-controls">
+                <input type="text" id="countryDirectorySearch" class="form-control" data-i18n-placeholder="country_directory_search_placeholder" placeholder="국가명으로 검색..." oninput="renderCountryDirectoryGrid()">
+            </div>
+            <div class="country-directory-grid" id="countryDirectoryGrid"></div>
+        </div>
+    </div>
+
     <footer>
         <div class="wrap footer-inner">
             <a onclick="showPage('home')" class="brand"><span class="brand-mark"></span>Unily</a>
@@ -2805,7 +2854,13 @@
                 uni_directory_search_placeholder: "영문 대학명으로 검색...",
                 stat_2: "지원 언어",
                 lang_popover_title: "실시간 번역 지원 언어",
-                stat_3: "활성 학생",
+                stat_3: "연결된 국가",
+                country_directory_hover_cta: "클릭해서 연결된 국가 둘러보기",
+                country_directory_title: "연결된 국가",
+                country_directory_search_placeholder: "국가명으로 검색...",
+                country_directory_empty: "검색 결과가 없어요.",
+                country_directory_uni_count: "개 대학",
+                country_directory_count_suffix: "개국",
                 why_title: "오직 실제 대학생들과 나누는<br>생산성 있는 대화",
                 why_sub: "학생 이메일 확인부터 Instant 번역, 관심사 기반 매칭까지 — 전 세계 캠퍼스를 하나로 연결하는 세 가지 핵심 기능입니다.",
                 why_c1_title: "학교 이메일 기반 가입",
@@ -2934,7 +2989,13 @@
                 uni_directory_search_placeholder: "Search by university name...",
                 stat_2: "Languages Supported",
                 lang_popover_title: "Real-time translation supported",
-                stat_3: "Active Students",
+                stat_3: "Connected Countries",
+                country_directory_hover_cta: "Click to explore connected countries",
+                country_directory_title: "Connected Countries",
+                country_directory_search_placeholder: "Search by country name...",
+                country_directory_empty: "No countries match your search.",
+                country_directory_uni_count: " universities",
+                country_directory_count_suffix: " countries",
                 why_title: "Real conversations, only with<br>real university students",
                 why_sub: "From a student email check to Instant translation and interest-based matching — three core features that bring campuses around the world together.",
                 why_c1_title: "University-Email-Based Sign-Up",
@@ -3246,6 +3307,8 @@
             if (typeof refreshCommunityLanguage === 'function') refreshCommunityLanguage();
             if (typeof refreshMyPageLanguage === 'function') refreshMyPageLanguage();
             if (typeof refreshNavCtaButton === 'function') refreshNavCtaButton();
+            // 연결된 국가 모달이 열려있는 상태로 언어를 바꾸면 국가명/문구가 바로 새 언어로 바뀌어야 한다.
+            if (document.getElementById('countryDirectoryOverlay')?.classList.contains('active')) renderCountryDirectoryGrid();
         }
     </script>
 
@@ -5745,6 +5808,92 @@
             listEl.insertAdjacentHTML('beforeend', html);
             uniDirectoryRenderCount += nextItems.length;
         }
+
+        /* ==================================================================
+           연결된 국가 목록 모달 — 히어로 "연결된 국가" 통계(예전 "활성 학생" 자리)를 클릭하면 열린다.
+           국가명은 7개 언어를 전부 손으로 정의해뒀다(국가명은 번역이 표준적이고 안정적이라
+           PROJECT_UI_TEXT와 동일한 패턴을 따르는 게 실시간 기계번역보다 더 정확하고 빠르다).
+           ================================================================== */
+        const COUNTRY_DIRECTORY = [
+            { code: 'KR', flag: '🇰🇷', uniCount: 210, names: { ko: '한국', en: 'South Korea', fr: 'Corée du Sud', es: 'Corea del Sur', de: 'Südkorea', ja: '韓国', 'zh-CN': '韩国' } },
+            { code: 'US', flag: '🇺🇸', uniCount: 320, names: { ko: '미국', en: 'United States', fr: 'États-Unis', es: 'Estados Unidos', de: 'USA', ja: 'アメリカ', 'zh-CN': '美国' } },
+            { code: 'GB', flag: '🇬🇧', uniCount: 130, names: { ko: '영국', en: 'United Kingdom', fr: 'Royaume-Uni', es: 'Reino Unido', de: 'Vereinigtes Königreich', ja: 'イギリス', 'zh-CN': '英国' } },
+            { code: 'JP', flag: '🇯🇵', uniCount: 95, names: { ko: '일본', en: 'Japan', fr: 'Japon', es: 'Japón', de: 'Japan', ja: '日本', 'zh-CN': '日本' } },
+            { code: 'CN', flag: '🇨🇳', uniCount: 110, names: { ko: '중국', en: 'China', fr: 'Chine', es: 'China', de: 'China', ja: '中国', 'zh-CN': '中国' } },
+            { code: 'DE', flag: '🇩🇪', uniCount: 85, names: { ko: '독일', en: 'Germany', fr: 'Allemagne', es: 'Alemania', de: 'Deutschland', ja: 'ドイツ', 'zh-CN': '德国' } },
+            { code: 'FR', flag: '🇫🇷', uniCount: 70, names: { ko: '프랑스', en: 'France', fr: 'France', es: 'Francia', de: 'Frankreich', ja: 'フランス', 'zh-CN': '法国' } },
+            { code: 'CA', flag: '🇨🇦', uniCount: 60, names: { ko: '캐나다', en: 'Canada', fr: 'Canada', es: 'Canadá', de: 'Kanada', ja: 'カナダ', 'zh-CN': '加拿大' } },
+            { code: 'BR', flag: '🇧🇷', uniCount: 55, names: { ko: '브라질', en: 'Brazil', fr: 'Brésil', es: 'Brasil', de: 'Brasilien', ja: 'ブラジル', 'zh-CN': '巴西' } },
+            { code: 'AU', flag: '🇦🇺', uniCount: 45, names: { ko: '호주', en: 'Australia', fr: 'Australie', es: 'Australia', de: 'Australien', ja: 'オーストラリア', 'zh-CN': '澳大利亚' } },
+            { code: 'SG', flag: '🇸🇬', uniCount: 8, names: { ko: '싱가포르', en: 'Singapore', fr: 'Singapour', es: 'Singapur', de: 'Singapur', ja: 'シンガポール', 'zh-CN': '新加坡' } },
+            { code: 'TW', flag: '🇹🇼', uniCount: 40, names: { ko: '대만', en: 'Taiwan', fr: 'Taïwan', es: 'Taiwán', de: 'Taiwan', ja: '台湾', 'zh-CN': '台湾' } },
+            { code: 'HK', flag: '🇭🇰', uniCount: 12, names: { ko: '홍콩', en: 'Hong Kong', fr: 'Hong Kong', es: 'Hong Kong', de: 'Hongkong', ja: '香港', 'zh-CN': '香港' } },
+            { code: 'IN', flag: '🇮🇳', uniCount: 90, names: { ko: '인도', en: 'India', fr: 'Inde', es: 'India', de: 'Indien', ja: 'インド', 'zh-CN': '印度' } },
+            { code: 'NZ', flag: '🇳🇿', uniCount: 15, names: { ko: '뉴질랜드', en: 'New Zealand', fr: 'Nouvelle-Zélande', es: 'Nueva Zelanda', de: 'Neuseeland', ja: 'ニュージーランド', 'zh-CN': '新西兰' } },
+            { code: 'NL', flag: '🇳🇱', uniCount: 30, names: { ko: '네덜란드', en: 'Netherlands', fr: 'Pays-Bas', es: 'Países Bajos', de: 'Niederlande', ja: 'オランダ', 'zh-CN': '荷兰' } },
+            { code: 'CH', flag: '🇨🇭', uniCount: 20, names: { ko: '스위스', en: 'Switzerland', fr: 'Suisse', es: 'Suiza', de: 'Schweiz', ja: 'スイス', 'zh-CN': '瑞士' } },
+            { code: 'SE', flag: '🇸🇪', uniCount: 25, names: { ko: '스웨덴', en: 'Sweden', fr: 'Suède', es: 'Suecia', de: 'Schweden', ja: 'スウェーデン', 'zh-CN': '瑞典' } },
+            { code: 'ES', flag: '🇪🇸', uniCount: 40, names: { ko: '스페인', en: 'Spain', fr: 'Espagne', es: 'España', de: 'Spanien', ja: 'スペイン', 'zh-CN': '西班牙' } },
+            { code: 'IT', flag: '🇮🇹', uniCount: 45, names: { ko: '이탈리아', en: 'Italy', fr: 'Italie', es: 'Italia', de: 'Italien', ja: 'イタリア', 'zh-CN': '意大利' } },
+        ];
+
+        // 이름을 countryName()으로 지으면 안 된다 — 이미 위쪽(line ~3502)에 같은 이름의
+        // countryByCode(code) 기반 함수가 존재해서(Dream Exchange 칩 등 여러 곳에서 country
+        // "코드" 문자열을 받는 용도), function 선언은 나중 것이 앞의 것을 덮어써 버려 그 모든
+        // 호출부가 깨진다(실제로 이 실수로 카드 렌더링 전체가 죽는 회귀가 났었다). 이 함수는
+        // COUNTRY_DIRECTORY 엔트리 "객체"를 받는 별개 용도라 이름을 분명히 다르게 둔다.
+        function countryDirEntryName(entry) {
+            return entry.names[currentLang] || entry.names.en;
+        }
+
+        // translations 딕셔너리(data-i18n용)를 DOM 없이 문자열로 직접 읽어야 할 때 쓴다 —
+        // applyStaticDictionary()와 동일한 우선순위(ko/en 직접 정의 → 그 외 언어는 번역 캐시)를 따른다.
+        function i18nText(key) {
+            const koSource = translations.ko[key];
+            if (koSource === undefined) return key;
+            if (currentLang === 'ko') return koSource;
+            if (currentLang === 'en' && translations.en[key] !== undefined) return translations.en[key];
+            return t(koSource);
+        }
+
+        function openCountryDirectory() {
+            document.getElementById('countryDirectoryOverlay').classList.add('active');
+            document.getElementById('countryDirectorySearch').value = '';
+            renderCountryDirectoryGrid();
+            document.getElementById('countryHoverTrigger').setAttribute('aria-expanded', 'true');
+        }
+        function closeCountryDirectory() {
+            document.getElementById('countryDirectoryOverlay').classList.remove('active');
+            document.getElementById('countryHoverTrigger').setAttribute('aria-expanded', 'false');
+        }
+
+        function renderCountryDirectoryGrid() {
+            const q = document.getElementById('countryDirectorySearch').value.trim().toLowerCase();
+            const filtered = COUNTRY_DIRECTORY.filter(c => !q || countryDirEntryName(c).toLowerCase().includes(q));
+            document.getElementById('countryDirectoryCount').textContent =
+                `${COUNTRY_DIRECTORY.length}${i18nText('country_directory_count_suffix')}`;
+            const gridEl = document.getElementById('countryDirectoryGrid');
+            if (filtered.length === 0) {
+                gridEl.innerHTML = `<div class="country-directory-empty">${escapeHTML(i18nText('country_directory_empty'))}</div>`;
+                return;
+            }
+            gridEl.innerHTML = filtered.map(c => `
+                <div class="country-card">
+                  <span class="country-card-flag">${c.flag}</span>
+                  <span class="country-card-name">${escapeHTML(countryDirEntryName(c))}</span>
+                  <span class="country-card-count">${c.uniCount.toLocaleString()}${escapeHTML(i18nText('country_directory_uni_count'))}</span>
+                </div>
+            `).join('');
+        }
+
+        // Esc 키로 열려있는 모달(약관/대학 목록/국가 목록 등 .legal-modal-overlay 계열 전부)을 닫는다.
+        // 여러 개가 동시에 열릴 일은 없으므로 active인 것만 찾아서 알맞은 close 함수를 호출한다.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (document.getElementById('countryDirectoryOverlay')?.classList.contains('active')) closeCountryDirectory();
+            else if (document.getElementById('uniDirectoryOverlay')?.classList.contains('active')) closeUniversityDirectory();
+            else if (document.getElementById('legalModalOverlay')?.classList.contains('active')) closeLegalModal();
+        });
 
         /* ==================================================================
            최초 로그인 온보딩 위저드
