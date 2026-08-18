@@ -7,3 +7,8 @@ beforeeditingmessage.html
 skills-lock.json
 firebase-debug.log
 *.log
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

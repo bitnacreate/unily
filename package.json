@@ -1,0 +1,12 @@
+{
+  "name": "unily",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Unily 스모크 테스트 스위트",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}
