@@ -215,10 +215,10 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.actorUid == request.auth.uid
         && request.resource.data.recipientUid != request.auth.uid
-        && request.resource.data.type == 'connect'
+        && (request.resource.data.type == 'connect' || request.resource.data.type == 'project')
         && request.resource.data.read == false
         && request.resource.data.keys().hasOnly(
-             ['recipientUid', 'type', 'actorUid', 'actorName', 'actorUniversity', 'actorMajor', 'chatId', 'read', 'createdAt']
+             ['recipientUid', 'type', 'actorUid', 'actorName', 'actorUniversity', 'actorMajor', 'chatId', 'read', 'createdAt', 'projectTitle']
            );
 
       // 수정: 받는 사람 본인이 읽음 처리(read)만 할 수 있다.
