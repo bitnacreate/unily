@@ -111,10 +111,16 @@ service cloud.firestore {
       //      "정식으로 수락된 적 없는" 대화라면(레거시 대화 포함) Connect/프로젝트 참여 버튼을
       //      다시 눌러 새 요청 카드를 보낼 수 있게 한다. 이미 accepted이거나 이미 pending인
       //      대화는 이 경로로 건드릴 수 없다(진행 중인 관계를 임의로 되돌리지 못하도록).
+      // 보안 감사로 발견된 우회 경로 수정: status를 안 건드리면 requestedBy/requestType까지
+      // 자유롭게 바꿀 수 있었다 — 예를 들어 요청을 "받은" 쪽이 status는 그대로 둔 채
+      // requestedBy를 자기 자신으로 슬쩍 바꿔치기하면, 대기(pending) 상태에서 먼저 메시지를
+      // 보낼 수 있는 권한(messages create 규칙이 requestedBy로 판단)을 부정하게 얻을 수 있었다.
+      // status와 마찬가지로 requestedBy/requestType도 아래 두 전이(전환) 분기를 통해서만
+      // 바뀔 수 있도록 묶는다.
       allow update: if request.auth != null
         && request.auth.uid in resource.data.participants
         && request.resource.data.participants == resource.data.participants
-        && ( !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+        && ( !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'requestedBy', 'requestType'])
              || ( resource.data.status == 'pending'
                   && request.auth.uid != resource.data.requestedBy
                   && request.resource.data.status in ['accepted', 'declined']
@@ -217,11 +223,22 @@ service cloud.firestore {
       // 받는 사람(recipientUid) 본인만 읽고, 보낸 사람(actorUid)은 본인 명의로만 새로 만들 수 있다.
       allow read: if request.auth != null && resource.data.recipientUid == request.auth.uid;
 
+      // 보안 감사로 발견된 신원 사칭 문제 수정: actorName/actorUniversity/actorMajor를 예전엔
+      // 클라이언트가 보내는 값 그대로 믿었다 — 로그인한 사람 누구나 임의의 이름·학교·전공을
+      // 사칭해서 다른 유저에게 "OO님이 커넥트를 요청했어요" 알림을 보낼 수 있었다(실명 기반
+      // 네트워킹 서비스라 피싱/사칭 벡터가 됨). 이제 실제 본인 users/{uid} 문서에 저장된
+      // 값과 정확히 일치할 때만 생성을 허용한다.
       allow create: if request.auth != null
         && request.resource.data.actorUid == request.auth.uid
         && request.resource.data.recipientUid != request.auth.uid
         && (request.resource.data.type == 'connect' || request.resource.data.type == 'project')
         && request.resource.data.read == false
+        && request.resource.data.actorName ==
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('name', '')
+        && request.resource.data.actorUniversity ==
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('university', '')
+        && request.resource.data.actorMajor ==
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('major', '')
         && request.resource.data.keys().hasOnly(
              ['recipientUid', 'type', 'actorUid', 'actorName', 'actorUniversity', 'actorMajor', 'chatId', 'read', 'createdAt', 'projectTitle']
            );
