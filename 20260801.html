@@ -127,6 +127,14 @@
     gap: 8px;
     flex-wrap: wrap;
   }
+  /* 언어를 바꾼 직후 백그라운드 번역이 도는 동안 화면 맨 위에 흐르는 진행 표시줄.
+     번역은 이제 화면을 막지 않고 진행되므로, 뭔가 돌고 있다는 신호가 따로 필요하다. */
+  body.lang-loading::after{
+    content:""; position:fixed; top:0; left:0; right:0; height:3px; z-index:10000; pointer-events:none;
+    background:linear-gradient(90deg, rgba(255,255,255,0) 0%, var(--indigo) 35%, var(--mint) 65%, rgba(255,255,255,0) 100%);
+    background-size:200% 100%; animation:langLoadingBar 1.1s linear infinite;
+  }
+  @keyframes langLoadingBar{ 0%{ background-position:100% 0; } 100%{ background-position:-100% 0; } }
   .btn-lang {
     background: rgba(255,255,255,0.1);
     border: 1px solid rgba(255,255,255,0.2);
@@ -3128,56 +3136,111 @@
             return t(stripHtml(koSource));
         }
 
-        // 문장 하나를 번역해서 캐시에 저장 (이미 캐시에 있으면 네트워크 요청 없이 바로 반환)
-        // Gemini(window.__aiTranslate, 모듈 스크립트 쪽에서 등록)를 우선 쓰고, 아직 준비 전이거나
-        // 실패하면(네트워크 오류/할당량 초과 등) 구글의 비공식 번역 엔드포인트로 대체한다 — 이
-        // 엔드포인트는 공식 지원 API가 아니라서 언제든 막히거나 rate-limit 걸릴 수 있어, 이제는
-        // 주 경로가 아니라 예비 수단으로만 쓴다. 아래 TranslationService.translate()와 동일한 패턴.
-        async function translateText(text, targetLang) {
-            if (!text || !text.trim() || targetLang === 'ko') return text;
-            translationCache[targetLang] = translationCache[targetLang] || {};
-            if (translationCache[targetLang][text] !== undefined) {
-                return translationCache[targetLang][text];
-            }
-            // 다른 유저(또는 이전 세션)가 이미 같은 문장을 이 언어로 번역해뒀다면 그걸 재사용하고
-            // Gemini는 아예 부르지 않는다 — 실패해도(비로그인 등) 조용히 넘어가고 평소대로 진행.
-            if (window.__fbGetCachedTranslation) {
-                try {
-                    const shared = await window.__fbGetCachedTranslation(targetLang, text);
-                    if (shared) {
-                        translationCache[targetLang][text] = shared;
-                        return shared;
-                    }
-                } catch (err) { /* 캐시 조회 실패는 무시 */ }
-            }
-            try {
-                if (!window.__aiTranslate) throw new Error('AI translate not ready');
-                translationCache[targetLang][text] = await window.__aiTranslate(text, 'auto', targetLang);
-                if (window.__fbSetCachedTranslation) window.__fbSetCachedTranslation(targetLang, text, translationCache[targetLang][text]);
-                return translationCache[targetLang][text];
-            } catch (err) {
-                console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
-            }
+        // ---- 문장 번역 파이프라인 ----
+        // 1) 메모리 캐시 → 2) Firestore 공유 캐시(다른 유저가 이미 번역해둔 문장)
+        // → 3) Gemini 일괄 번역 → 4) 실패 시 구글 비공식 엔드포인트(예비)
+        // 예전에는 문장 하나하나가 이 단계를 각자 밟아서, 언어 전환 한 번에 Gemini 호출 수백 개가
+        // 동시에 나갔다(= 할당량 초과 → 대부분 실패 → 화면은 계속 한국어). 이제는 묶어서 처리한다.
+        const TRANSLATE_CHUNK_SIZE = 25;
+        const inflightTranslations = {}; // { [lang]: { [원문]: Promise } } — 같은 문장을 두 번 요청하지 않도록
+
+        // 구글 무료 번역 엔드포인트: Gemini 호출이 실패했을 때(네트워크 오류, 할당량 초과, 모델 미지원 등)의
+        // 예비 수단. 공식 지원 API가 아니라 언제든 막힐 수 있어 주 경로로는 쓰지 않는다.
+        async function fallbackTranslateOne(text, targetLang) {
             try {
                 // sl=ko로 고정하면 이미 영어로 적혀 있는 프로젝트 모집 데이터(역할/설명 등)가
-                // 다른 언어로 번역되지 않는 문제가 있어, 원문 언어를 자동 감지하도록 auto로 변경.
+                // 다른 언어로 번역되지 않는 문제가 있어, 원문 언어를 자동 감지하도록 auto를 쓴다.
                 const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
                 const res = await fetch(url);
                 const data = await res.json();
                 const translated = (data[0] || []).map(chunk => chunk[0]).join('');
-                translationCache[targetLang][text] = translated || text;
-                if (translated && window.__fbSetCachedTranslation) window.__fbSetCachedTranslation(targetLang, text, translated);
-                return translationCache[targetLang][text];
+                return translated || null;
             } catch (err) {
-                return text; // 둘 다 실패하면 원문 유지 (캐시엔 저장하지 않아 다음에 다시 시도됨)
+                return null; // null은 캐시에 넣지 않아 다음 기회에 다시 시도된다
             }
         }
 
-        // 여러 문장을 한꺼번에 병렬로 번역
-        async function translateBatch(texts, targetLang) {
+        // 문장 묶음 하나를 번역해 [번역문|null] 배열로 돌려준다.
+        async function translateChunk(chunk, targetLang) {
+            try {
+                if (!window.__aiTranslateBatch) throw new Error('AI translate not ready');
+                return await window.__aiTranslateBatch(chunk, 'auto', targetLang);
+            } catch (err) {
+                console.error('Gemini 일괄 번역 실패, 예비 번역으로 대체:', err);
+            }
+            return await Promise.all(chunk.map(txt => fallbackTranslateOne(txt, targetLang)));
+        }
+
+        // 여러 문장을 묶어서 번역하고 캐시에 채운다.
+        // onChunk: 묶음 하나가 도착할 때마다 호출 — 전체가 끝나기를 기다리지 않고 준비된 문장부터
+        //          바로 화면에 나타나게 하는 고리다.
+        async function translateBatch(texts, targetLang, onChunk) {
             if (targetLang === 'ko') return;
-            const unique = Array.from(new Set(texts.filter(txt => txt && txt.trim())));
-            await Promise.all(unique.map(txt => translateText(txt, targetLang)));
+            translationCache[targetLang] = translationCache[targetLang] || {};
+            inflightTranslations[targetLang] = inflightTranslations[targetLang] || {};
+            const cache = translationCache[targetLang];
+            const inflight = inflightTranslations[targetLang];
+
+            const waits = [];
+            const missing = [];
+            Array.from(new Set((texts || []).filter(txt => txt && txt.trim()))).forEach(txt => {
+                if (cache[txt] !== undefined) return;
+                if (inflight[txt]) waits.push(inflight[txt]);
+                else missing.push(txt);
+            });
+
+            const work = (async () => {
+                if (!missing.length) return;
+                // 다른 유저(또는 이전 세션)가 이미 번역해둔 문장은 Gemini를 아예 부르지 않는다.
+                if (window.__fbGetCachedTranslations) {
+                    try {
+                        const shared = await window.__fbGetCachedTranslations(targetLang, missing);
+                        Object.keys(shared || {}).forEach(src => { cache[src] = shared[src]; });
+                    } catch (err) { /* 공유 캐시 조회 실패는 무시 */ }
+                }
+                const remaining = missing.filter(txt => cache[txt] === undefined);
+                // 공유 캐시로 채워진 만큼은 Gemini를 기다리지 않고 먼저 화면에 반영한다.
+                if (onChunk && remaining.length !== missing.length) onChunk();
+                if (!remaining.length) return;
+
+                const chunks = [];
+                for (let i = 0; i < remaining.length; i += TRANSLATE_CHUNK_SIZE) {
+                    chunks.push(remaining.slice(i, i + TRANSLATE_CHUNK_SIZE));
+                }
+                await Promise.all(chunks.map(async chunk => {
+                    const out = await translateChunk(chunk, targetLang);
+                    const fresh = {};
+                    chunk.forEach((src, i) => {
+                        const translated = out && out[i];
+                        if (typeof translated === 'string' && translated.trim()) {
+                            cache[src] = translated;
+                            fresh[src] = translated;
+                        }
+                    });
+                    if (onChunk) onChunk();
+                    if (window.__fbSetCachedTranslations && Object.keys(fresh).length) {
+                        window.__fbSetCachedTranslations(targetLang, fresh);
+                    }
+                }));
+            })();
+
+            missing.forEach(txt => { inflight[txt] = work; });
+            work.finally(() => {
+                missing.forEach(txt => { if (inflight[txt] === work) delete inflight[txt]; });
+            });
+
+            await Promise.all([work, ...waits]);
+        }
+
+        // 문장 하나를 번역해서 캐시에 저장 (이미 캐시에 있으면 네트워크 요청 없이 바로 반환).
+        // 토스트/alert처럼 "지금 당장 이 한 문장"이 필요한 자리에서 쓴다.
+        async function translateText(text, targetLang) {
+            if (!text || !text.trim() || targetLang === 'ko') return text;
+            translationCache[targetLang] = translationCache[targetLang] || {};
+            if (translationCache[targetLang][text] !== undefined) return translationCache[targetLang][text];
+            await translateBatch([text], targetLang);
+            const translated = translationCache[targetLang][text];
+            return translated !== undefined ? translated : text;
         }
 
         // 자잘하게 코드 곳곳에서 쓰이는 알림/버튼 문구 (탐색 카드 인증 배지, 결과 카운트 템플릿,
@@ -3224,9 +3287,14 @@
 
         // 지금 이 순간 사이트 전체(홈/탐색/메시지함/마이페이지 + 아직 열지 않은 모든 대화)에서
         // 번역이 필요한 문장을 모두 모은다. 현재 어떤 화면을 보고 있는지와 무관하게 전부 포함.
-        function collectAllTranslatableTexts() {
+        function collectAllTranslatableTexts(langCode) {
             const set = new Set();
-            Object.keys(translations.ko).forEach(key => set.add(stripHtml(translations.ko[key])));
+            // 영어는 사람이 직접 쓴 정적 사전(translations.en)이 이미 있으므로 그 키들은 기계 번역
+            // 대상에서 뺀다 — 영어 전환은 네트워크를 거의 타지 않고 즉시 끝난다.
+            Object.keys(translations.ko).forEach(key => {
+                if (langCode === 'en' && translations.en[key] !== undefined) return;
+                set.add(stripHtml(translations.ko[key]));
+            });
             students.forEach(s => {
                 set.add(s.bio);
                 set.add(s.major);
@@ -3278,37 +3346,100 @@
             });
         }
 
-        // 상단 언어 버튼 클릭 시 실행되는 단일 진입점.
-        // 누르는 그 순간, 지금 안 보이는 화면과 아직 열지 않은 대화까지 포함해
-        // 사이트 전체에서 번역이 필요한 문장을 모아 한 번에 번역을 끝낸 뒤 화면을 다시 그린다.
-        async function switchLanguage(langCode, btnEl) {
-            currentLang = langCode;
-            document.querySelectorAll('.btn-lang').forEach(btn => btn.classList.remove('active'));
-            if (btnEl) btnEl.classList.add('active');
-            // 상단 언어 버튼과 푸터 언어 선택창은 같은 상태를 공유해야 하므로, 어느 쪽에서
-            // 바꾸든 나머지 하나도 항상 값이 맞게 동기화한다.
+        // 지금의 currentLang을 화면 전체에 바른다 — 정적 문구(data-i18n)뿐 아니라 동적으로 그려지는
+        // 탐색 카드 / 메시지함 / 대화창 / 커뮤니티 / 마이페이지까지 전부 다시 그린다.
+        // 번역 묶음이 도착할 때마다 다시 불리므로, 준비된 문장부터 차례로 화면에 나타난다.
+        function applyCurrentLanguageToUI() {
+            applyStaticDictionary(currentLang);
+            document.documentElement.lang = currentLang;
+            const steps = [
+                () => populateDreamCountryFilter(),
+                () => renderDreamCountryPicker(),
+                () => render(),
+                () => renderMessagesList(),
+                () => { if (typeof currentMessagesTab !== 'undefined' && currentMessagesTab === 'channels' && typeof renderChannelsList === 'function') renderChannelsList(); },
+                () => renderChatArea(),
+                () => renderSavedStudents(),
+                // 프로필 모달이 열려있는 상태로 언어를 바꾸면 그 안의 Current Project / Dream Exchange Countries 등도 즉시 갱신
+                () => { if (currentProfileStudentId !== null) openStudentProfile(currentProfileStudentId); },
+                () => { if (typeof refreshCommunityLanguage === 'function') refreshCommunityLanguage(); },
+                () => { if (typeof refreshMyPageLanguage === 'function') refreshMyPageLanguage(); },
+                () => { if (typeof refreshNavCtaButton === 'function') refreshNavCtaButton(); },
+                // 연결된 국가 / 대학 목록 모달이 열려있는 상태로 언어를 바꿔도 바로 새 언어로 바뀌어야 한다.
+                () => { if (document.getElementById('countryDirectoryOverlay')?.classList.contains('active')) renderCountryDirectoryGrid(); },
+                () => { if (document.getElementById('uniDirectoryOverlay')?.classList.contains('active') && typeof renderUniversityDirectoryList === 'function') renderUniversityDirectoryList(); },
+            ];
+            // 한 화면에서 에러가 나도(아직 로그인 안 해 비어 있는 패널 등) 나머지 화면의 번역까지
+            // 같이 멈추면 안 되므로, 하나씩 감싸서 개별적으로만 실패하게 둔다.
+            steps.forEach(step => {
+                try { step(); } catch (err) { console.error('언어 적용 중 오류:', err); }
+            });
+        }
+
+        // 번역 묶음이 연달아 도착할 때 매번 화면을 통째로 다시 그리면 깜빡이므로 살짝 모아서 그린다.
+        let langRepaintTimer = null;
+        function scheduleLanguageRepaint() {
+            if (langRepaintTimer) return;
+            langRepaintTimer = setTimeout(() => {
+                langRepaintTimer = null;
+                applyCurrentLanguageToUI();
+            }, 200);
+        }
+
+        // 상단 언어 버튼과 푸터 언어 선택창은 같은 상태를 공유해야 하므로, 어느 쪽에서 바꾸든
+        // (그리고 저장된 언어를 복원할 때도) 나머지 하나가 항상 같은 값을 가리키게 맞춘다.
+        function syncLanguageControls(langCode) {
+            document.querySelectorAll('.btn-lang').forEach(btn => {
+                const onclick = btn.getAttribute('onclick') || '';
+                btn.classList.toggle('active', onclick.includes("'" + langCode + "'"));
+            });
             const footerSelect = document.getElementById('footerLangSelect');
             if (footerSelect && footerSelect.value !== langCode) footerSelect.value = langCode;
+            // 마이페이지 → 설정 탭의 언어 버튼도 같은 상태를 가리켜야 한다. 거기서 언어를 바꾸면
+            // 예전에는 그 탭을 다시 그리기 전까지 선택 표시가 옛 언어에 남아 있었다.
+            document.querySelectorAll('.settings-lang-btn').forEach(btn => {
+                const onclick = btn.getAttribute('onclick') || '';
+                btn.classList.toggle('active', onclick.includes("'" + langCode + "'"));
+            });
+        }
 
-            if (langCode !== 'ko') {
-                const allTexts = collectAllTranslatableTexts();
-                await translateBatch(allTexts, langCode);
+        // 언어 전환 세대 번호. 번역은 비동기라 연달아 언어를 바꾸면 "이전 언어"의 결과가 뒤늦게
+        // 도착해 화면을 덮어쓸 수 있다. 바꿀 때마다 1씩 올려서 자기 세대가 아닌 응답은 버린다.
+        let langEpoch = 0;
+
+        // 상단 언어 버튼 / 푸터 언어 선택창의 단일 진입점.
+        //
+        // [예전 동작] 사이트 전체(수백 문장)의 번역이 "전부" 끝날 때까지 await로 기다린 다음에야
+        // 화면을 다시 그렸다. 문장마다 Gemini를 한 번씩 부르다 보니 분당 할당량에 바로 걸려 대부분
+        // 실패했고, 그동안 화면은 한국어 그대로였다 — 이게 "언어를 골라도 메시지·커뮤니티를 비롯해
+        // 아무 글자도 안 바뀐다"의 정체였다.
+        //
+        // [지금] 누르는 즉시 화면부터 새 언어로 다시 그리고(캐시에 이미 있는 문장과 영어 정적 사전은
+        // 이 시점에 바로 반영), 나머지는 25개씩 묶어 백그라운드로 번역하면서 묶음이 도착할 때마다
+        // 화면을 다시 칠한다. 메시지/게시글 본문은 각 렌더러가 TranslationService로 이어받는다.
+        async function switchLanguage(langCode, btnEl) {
+            if (!langCode) return;
+            currentLang = langCode;
+            const epoch = ++langEpoch;
+            // 새로고침하거나 다른 화면에 들어갔다 나와도 고른 언어가 유지되도록 저장해둔다.
+            try { localStorage.setItem('unily.lang', langCode); } catch (err) { /* 시크릿 모드 등 저장 불가는 무시 */ }
+
+            syncLanguageControls(langCode);
+            applyCurrentLanguageToUI();
+            if (langCode === 'ko') { document.body.classList.remove('lang-loading'); return; }
+
+            document.body.classList.add('lang-loading');
+            try {
+                await translateBatch(collectAllTranslatableTexts(langCode), langCode, () => {
+                    if (epoch !== langEpoch) return; // 그 사이 다른 언어로 바꿨으면 버린다
+                    scheduleLanguageRepaint();
+                });
+            } finally {
+                if (epoch === langEpoch) {
+                    document.body.classList.remove('lang-loading');
+                    applyCurrentLanguageToUI();
+                }
             }
-
-            applyStaticDictionary(langCode);
-            populateDreamCountryFilter();
-            renderDreamCountryPicker();
-            render();
-            renderMessagesList();
-            renderChatArea();
-            renderSavedStudents();
-            // 프로필 모달이 열려있는 상태로 언어를 바꾸면 그 안의 Current Project / Dream Exchange Countries 등도 즉시 갱신
-            if (currentProfileStudentId !== null) openStudentProfile(currentProfileStudentId);
-            if (typeof refreshCommunityLanguage === 'function') refreshCommunityLanguage();
-            if (typeof refreshMyPageLanguage === 'function') refreshMyPageLanguage();
-            if (typeof refreshNavCtaButton === 'function') refreshNavCtaButton();
-            // 연결된 국가 모달이 열려있는 상태로 언어를 바꾸면 국가명/문구가 바로 새 언어로 바뀌어야 한다.
-            if (document.getElementById('countryDirectoryOverlay')?.classList.contains('active')) renderCountryDirectoryGrid();
         }
     </script>
 
@@ -4765,12 +4896,14 @@
         // 캐시에 없는 마지막 메시지 미리보기는 번역이 끝나는 대로 해당 항목만 조용히 갱신한다
         // (커뮤니티 피드의 queueTranslations와 동일한 패턴).
         function queueMessageListTranslations(chats) {
+            const langAtRequest = currentLang; // 도착 시점에 언어가 또 바뀌었으면 결과를 버리기 위해
             chats.forEach(c => {
                 if (!c.lastMessageLang || c.lastMessageLang === currentLang) return;
                 const cached = TranslationService.getCached(c.lastMessageLang, currentLang, c.lastMessage || '');
                 if (cached !== undefined) return;
                 const lang = c.lastMessageLang, text = c.lastMessage || '', id = c.id;
                 TranslationService.translate(text, lang, currentLang).then(translated => {
+                    if (currentLang !== langAtRequest) return;
                     const el = document.getElementById('msg-preview-text-' + id);
                     if (el) el.textContent = translated;
                 });
@@ -6799,6 +6932,12 @@
                 uniHoverTrigger.addEventListener('focus', () => setExpanded(true));
                 uniHoverTrigger.addEventListener('blur', () => setExpanded(false));
             }
+
+            // 마지막으로 고른 언어를 복원한다. 예전에는 새로고침하거나 브라우저를 다시 열면 늘
+            // 한국어로 돌아와 있어서, 언어를 고른 뒤 화면을 옮겨 다니면 원래대로 보이는 일이 있었다.
+            let savedLang = null;
+            try { savedLang = localStorage.getItem('unily.lang'); } catch (err) { savedLang = null; }
+            if (savedLang && savedLang !== currentLang) switchLanguage(savedLang);
         });
     </script>
 
@@ -7097,11 +7236,22 @@
            SERVICE LAYER
            ================================================================== */
 
-        // TranslationService: Firebase AI Logic(Gemini)으로 실시간 번역한다.
+        // TranslationService: 게시글/댓글/메시지 "본문"을 Firebase AI Logic(Gemini)으로 실시간 번역한다.
         // 호출부는 translate(text, sourceLang, targetLang)만 알고 있으면 되므로
         // 내부 구현(AI 호출 방식)이 바뀌어도 호출부는 그대로 쓸 수 있다.
+        //
+        // 핵심: 피드 한 장을 그릴 때마다 게시글·댓글 수십 개가 각자 translate()를 부르는데, 예전에는
+        // 그 하나하나가 Gemini 호출 한 번이었다(= 커뮤니티/메시지함이 언어를 바꿔도 좀처럼 안 바뀌던
+        // 원인). 이제는 같은 순간에 들어온 요청을 40ms 창으로 모아 25개씩 한 번의 호출로 번역하고,
+        // 이미 누군가 번역해둔 문장은 Firestore 공유 캐시에서 바로 가져온다.
         const TranslationService = (function () {
-            const cache = {};
+            const cache = {};      // { 'src|tgt': { [원문]: 번역문 } }
+            const inflight = {};   // { 'src|tgt': { [원문]: Promise } }
+            const queue = {};      // { 'src|tgt': [{ text, resolve }] }
+            const timers = {};
+            const FLUSH_DELAY = 40;
+            const MAX_PER_CALL = 25;
+
             function cacheKey(sourceLang, targetLang) { return sourceLang + '|' + targetLang; }
 
             function getCached(sourceLang, targetLang, text) {
@@ -7118,23 +7268,80 @@
                 return (data[0] || []).map(chunk => chunk[0]).join('') || text;
             }
 
-            async function translate(text, sourceLang, targetLang) {
-                if (!text || sourceLang === targetLang) return text;
-                const key = cacheKey(sourceLang, targetLang);
-                cache[key] = cache[key] || {};
-                if (cache[key][text] !== undefined) return cache[key][text];
+            // 문장 묶음 하나를 처리해서 { 원문: 번역문 }으로 돌려준다.
+            async function translateGroup(texts, sourceLang, targetLang) {
+                const out = {};
+                // 1) 다른 유저/이전 세션이 이미 번역해둔 문장은 Gemini를 부르지 않는다.
+                //    (공유 캐시는 UI 문구용 translateText와 같은 저장소를 쓴다 — 목적지 언어 + 원문 기준)
+                if (window.__fbGetCachedTranslations) {
+                    try {
+                        const shared = await window.__fbGetCachedTranslations(targetLang, texts);
+                        Object.keys(shared || {}).forEach(src => { out[src] = shared[src]; });
+                    } catch (err) { /* 공유 캐시 조회 실패는 무시 */ }
+                }
+                const need = texts.filter(t => out[t] === undefined);
+                if (!need.length) return out;
+
                 try {
-                    if (!window.__aiTranslate) throw new Error('AI translate not ready');
-                    cache[key][text] = await window.__aiTranslate(text, sourceLang, targetLang);
+                    if (!window.__aiTranslateBatch) throw new Error('AI translate not ready');
+                    const results = await window.__aiTranslateBatch(need, sourceLang, targetLang);
+                    const fresh = {};
+                    need.forEach((t, i) => {
+                        const v = results[i];
+                        if (typeof v === 'string' && v.trim()) { out[t] = v; fresh[t] = v; }
+                        else { out[t] = t; }
+                    });
+                    if (window.__fbSetCachedTranslations && Object.keys(fresh).length) {
+                        window.__fbSetCachedTranslations(targetLang, fresh);
+                    }
                 } catch (err) {
                     console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
-                    try {
-                        cache[key][text] = await fallbackTranslate(text, sourceLang, targetLang);
-                    } catch (err2) {
-                        cache[key][text] = text;
-                    }
+                    await Promise.all(need.map(async t => {
+                        try { out[t] = await fallbackTranslate(t, sourceLang, targetLang); }
+                        catch (err2) { out[t] = t; }
+                    }));
                 }
-                return cache[key][text];
+                return out;
+            }
+
+            async function flush(key, sourceLang, targetLang) {
+                timers[key] = null;
+                const items = queue[key] || [];
+                queue[key] = [];
+                if (!items.length) return;
+
+                const groups = [];
+                for (let i = 0; i < items.length; i += MAX_PER_CALL) groups.push(items.slice(i, i + MAX_PER_CALL));
+                await Promise.all(groups.map(async group => {
+                    const texts = group.map(it => it.text);
+                    let out = {};
+                    try { out = await translateGroup(texts, sourceLang, targetLang); }
+                    catch (err) { console.error('번역 묶음 처리 실패:', err); }
+                    group.forEach(it => {
+                        const v = out[it.text];
+                        const value = (typeof v === 'string' && v.trim()) ? v : it.text;
+                        cache[key][it.text] = value;
+                        it.resolve(value);
+                    });
+                }));
+            }
+
+            function translate(text, sourceLang, targetLang) {
+                if (!text || sourceLang === targetLang) return Promise.resolve(text);
+                const key = cacheKey(sourceLang, targetLang);
+                cache[key] = cache[key] || {};
+                if (cache[key][text] !== undefined) return Promise.resolve(cache[key][text]);
+                inflight[key] = inflight[key] || {};
+                if (inflight[key][text]) return inflight[key][text];
+
+                const p = new Promise(resolve => {
+                    queue[key] = queue[key] || [];
+                    queue[key].push({ text, resolve });
+                    if (!timers[key]) timers[key] = setTimeout(() => flush(key, sourceLang, targetLang), FLUSH_DELAY);
+                });
+                inflight[key][text] = p;
+                p.then(() => { delete inflight[key][text]; });
+                return p;
             }
 
             return { translate, getCached };
@@ -7464,11 +7671,14 @@
         }
 
         function queueCommentTranslation(comment) {
+            // 번역이 도착하기 전에 유저가 또 언어를 바꿀 수 있다. 그때 이전 언어의 결과가 들어와
+            // 화면을 덮어쓰면 안 되므로, 요청 시점의 언어를 기억해뒀다가 다르면 버린다.
+            const langAtRequest = currentLang;
             if (comment.lang !== currentLang && !showOriginalSet.has('comment:' + comment.id)) {
                 const cached = TranslationService.getCached(comment.lang, currentLang, comment.text);
                 if (cached === undefined) {
                     TranslationService.translate(comment.text, comment.lang, currentLang).then(translated => {
-                        if (showOriginalSet.has('comment:' + comment.id)) return;
+                        if (showOriginalSet.has('comment:' + comment.id) || currentLang !== langAtRequest) return;
                         const el = document.getElementById('comment-text-' + comment.id);
                         if (el) el.textContent = translated;
                     });
@@ -7477,12 +7687,13 @@
             (comment.replies || []).forEach(r => queueCommentTranslation(r));
         }
         function queueTranslations(posts) {
+            const langAtRequest = currentLang; // 도착 시점에 언어가 또 바뀌었으면 결과를 버리기 위해
             posts.forEach(post => {
                 if (post.lang !== currentLang && !showOriginalSet.has('post:' + post.id)) {
                     const cached = TranslationService.getCached(post.lang, currentLang, post.body);
                     if (cached === undefined) {
                         TranslationService.translate(post.body, post.lang, currentLang).then(translated => {
-                            if (showOriginalSet.has('post:' + post.id)) return;
+                            if (showOriginalSet.has('post:' + post.id) || currentLang !== langAtRequest) return;
                             const el = document.getElementById('post-body-' + post.id);
                             if (el) el.textContent = translated;
                         });
@@ -7491,7 +7702,7 @@
                         const titleCached = TranslationService.getCached(post.lang, currentLang, post.title);
                         if (titleCached === undefined) {
                             TranslationService.translate(post.title, post.lang, currentLang).then(translated => {
-                                if (showOriginalSet.has('post:' + post.id)) return;
+                                if (showOriginalSet.has('post:' + post.id) || currentLang !== langAtRequest) return;
                                 const el = document.getElementById('post-title-' + post.id);
                                 if (el) el.textContent = translated;
                             });
@@ -7695,13 +7906,14 @@
         // 채팅방을 열 때(또는 다시 그릴 때)마다, 아직 캐시에 없는 메시지 번역을 한꺼번에 요청해서
         // 도착하는 대로 말풍선 텍스트를 제자리에서 갈아끼운다(게시글/댓글과 동일한 패턴).
         function queueMessageTranslations(messages) {
+            const langAtRequest = currentLang; // 도착 시점에 언어가 또 바뀌었으면 결과를 버리기 위해
             messages.forEach(m => {
                 if (!m.lang || m.lang === currentLang) return;
                 if (showOriginalSet.has('message:' + m.id)) return;
                 const cached = TranslationService.getCached(m.lang, currentLang, m.text);
                 if (cached === undefined) {
                     TranslationService.translate(m.text, m.lang, currentLang).then(translated => {
-                        if (showOriginalSet.has('message:' + m.id)) return;
+                        if (showOriginalSet.has('message:' + m.id) || currentLang !== langAtRequest) return;
                         const el = document.getElementById('msg-text-' + m.id);
                         if (el) el.textContent = translated;
                     });
@@ -7871,6 +8083,7 @@
 
                 const shownOriginal = showOriginalSet.has('post:' + post.id);
                 const sameLang = post.lang === currentLang;
+                const langAtRender = currentLang; // 도착 시점에 언어가 또 바뀌었으면 결과를 버리기 위해
                 const cachedBody = TranslationService.getCached(post.lang, currentLang, post.body);
                 const bodyText = sameLang || shownOriginal ? post.body : (cachedBody !== undefined ? cachedBody : post.body);
                 const cachedTitle = TranslationService.getCached(post.lang, currentLang, post.title || '');
@@ -7973,14 +8186,14 @@
                 if (!sameLang && !shownOriginal) {
                     if (cachedBody === undefined) {
                         TranslationService.translate(post.body, post.lang, currentLang).then(translated => {
-                            if (showOriginalSet.has('post:' + post.id) || currentDetailPostId !== post.id) return;
+                            if (showOriginalSet.has('post:' + post.id) || currentDetailPostId !== post.id || currentLang !== langAtRender) return;
                             const el = document.getElementById('detailBody');
                             if (el) el.textContent = translated;
                         });
                     }
                     if (post.title && cachedTitle === undefined) {
                         TranslationService.translate(post.title, post.lang, currentLang).then(translated => {
-                            if (showOriginalSet.has('post:' + post.id) || currentDetailPostId !== post.id) return;
+                            if (showOriginalSet.has('post:' + post.id) || currentDetailPostId !== post.id || currentLang !== langAtRender) return;
                             const el = document.getElementById('detailTitle');
                             if (el) el.textContent = translated;
                         });
@@ -8454,6 +8667,7 @@
         doc,
         getDoc,
         getDocs,
+        documentId,
         setDoc,
         addDoc,
         updateDoc,
@@ -8581,10 +8795,48 @@
         }
       });
       const ai = getAI(app, { backend: new GoogleAIBackend() });
-      const translateModel = getGenerativeModel(ai, {
-        model: "gemini-3.6-flash",
-        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
-      });
+
+      // 모델 이름 하나만 박아두면, 그 모델이 프로젝트/리전에서 막혀 있거나 나중에 폐기됐을 때
+      // 번역이 통째로 죽는다. 모델을 못 쓰는 종류의 에러(404/403)가 나면 다음 후보 모델로
+      // 자동 승계한다. (할당량 초과/네트워크 오류로는 승계하지 않는다.)
+      const TRANSLATE_MODEL_IDS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"];
+      let translateModelIdx = 0;
+      const translateModelCache = {};
+      function translateModel(jsonMode) {
+        const id = TRANSLATE_MODEL_IDS[translateModelIdx];
+        const key = id + (jsonMode ? ":json" : "");
+        if (!translateModelCache[key]) {
+          translateModelCache[key] = getGenerativeModel(ai, {
+            model: id,
+            generationConfig: jsonMode
+              ? { temperature: 0.2, maxOutputTokens: 8192, responseMimeType: "application/json" }
+              : { temperature: 0.2, maxOutputTokens: 1024 },
+          });
+        }
+        return translateModelCache[key];
+      }
+      function isModelUnavailable(err) {
+        const msg = String((err && (err.message || err.code)) || "");
+        return /not found|not_found|404|does not exist|not supported|unsupported|permission[_ -]?denied|403/i.test(msg);
+      }
+      async function generateTranslation(prompt, jsonMode) {
+        let lastErr;
+        for (let attempt = translateModelIdx; attempt < TRANSLATE_MODEL_IDS.length; attempt++) {
+          try {
+            const result = await translateModel(jsonMode).generateContent(prompt);
+            return result.response.text();
+          } catch (err) {
+            lastErr = err;
+            if (isModelUnavailable(err) && translateModelIdx < TRANSLATE_MODEL_IDS.length - 1) {
+              console.warn(`Gemini 모델 ${TRANSLATE_MODEL_IDS[translateModelIdx]} 사용 불가 → 다음 후보로 전환`, err);
+              translateModelIdx++;
+              continue;
+            }
+            throw err;
+          }
+        }
+        throw lastErr;
+      }
 
       const LANG_NAMES = {
         ko: "Korean", en: "English", fr: "French", es: "Spanish",
@@ -8603,8 +8855,37 @@
             `Output ONLY the translated text, with no quotes, labels, or explanation.\n\n${text}`
           : `Translate the following text to ${targetName}.\n` +
             `Output ONLY the translated text, with no quotes, labels, or explanation.\n\n${text}`;
-        const result = await translateModel.generateContent(prompt);
-        return result.response.text().trim();
+        return (await generateTranslation(prompt, false)).trim();
+      };
+
+      // 여러 문장을 "한 번의 호출"로 번역한다.
+      // 이게 이번 수정의 핵심: 예전에는 문장 하나당 generateContent를 한 번씩 불러서, 언어를
+      // 한 번 바꾸면 사이트 전체 문장 수(수백 개)만큼 요청이 동시에 나갔다. 분당 할당량에 바로
+      // 걸려 대부분이 실패하고, 전부 끝날 때까지 화면은 한국어 그대로 멈췐 있었다.
+      // 이제 25개씩 묶어 JSON 배열로 주고받아 호출 수를 수십 분의 일로 줄인다.
+      window.__aiTranslateBatch = async function (texts, sourceLang, targetLang) {
+        if (!texts || !texts.length) return [];
+        if (texts.length === 1) return [await window.__aiTranslate(texts[0], sourceLang, targetLang)];
+        const targetName = LANG_NAMES[targetLang] || targetLang;
+        const sourceName = sourceLang && sourceLang !== 'auto' ? (LANG_NAMES[sourceLang] || sourceLang) : null;
+        const prompt =
+          `Translate every string in the JSON array below ${sourceName ? `from ${sourceName} ` : ""}into ${targetName}.\n` +
+          `These are user interface labels and user-written posts/messages of a global university student network.\n` +
+          `Rules:\n` +
+          `- Reply with ONLY a JSON array of strings: same length, same order as the input.\n` +
+          `- Keep placeholders ({n}, {country}, ...), emoji, URLs, @mentions and #tags exactly as they are.\n` +
+          `- Keep it natural and concise, like a native UI would read.\n` +
+          `- If an item is already ${targetName}, repeat it unchanged.\n\n` +
+          JSON.stringify(texts);
+        const raw = (await generateTranslation(prompt, true)).trim();
+        // responseMimeType을 쓰면 순수 JSON이 오지만, 모델 폴백으로 지원 안 하는 모델을 쓰게 되면
+        // ```json 펜스가 섞여 올 수 있어 한 겹 벗겨낸다.
+        const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
+        const parsed = JSON.parse(cleaned);
+        if (!Array.isArray(parsed) || parsed.length !== texts.length) {
+          throw new Error(`batch translate shape mismatch: ${Array.isArray(parsed) ? parsed.length : typeof parsed} vs ${texts.length}`);
+        }
+        return parsed.map((v, i) => (typeof v === "string" && v.trim() ? v : texts[i]));
       };
 
       /* ==================================================================
@@ -8627,6 +8908,30 @@
         const snap = await getDoc(doc(db, "translationCache", lang, "strings", fnv1aHash(text)));
         return snap.exists() ? snap.data().translated : null;
       };
+      // 여러 문장의 공유 캐시를 한 번에 조회한다({원문: 번역문}). 문장마다 getDoc을 부르면
+      // 언어 전환 한 번에 수백 번의 읽기가 나가므로, documentId() in 쿼리(한 번에 30개)로 묶는다.
+      window.__fbGetCachedTranslations = async function (lang, texts) {
+        const found = {};
+        const unique = Array.from(new Set((texts || []).filter((t) => t && t.trim())));
+        const chunks = [];
+        for (let i = 0; i < unique.length; i += 30) chunks.push(unique.slice(i, i + 30));
+        // 묶음들을 순서대로 기다리면 왕복이 그만큼 쌓여 첫 화면 갱신이 늦어지므로 한꺼번에 보낸다.
+        await Promise.all(chunks.map(async (chunk) => {
+          const byHash = {};
+          chunk.forEach((t) => { byHash[fnv1aHash(t)] = t; });
+          try {
+            const snap = await getDocs(
+              query(collection(db, "translationCache", lang, "strings"), where(documentId(), "in", Object.keys(byHash)))
+            );
+            snap.forEach((d) => {
+              const src = byHash[d.id];
+              const data = d.data();
+              if (src !== undefined && data && data.translated) found[src] = data.translated;
+            });
+          } catch (err) { /* 캐시 조회 실패는 무시하고 평소대로 번역 */ }
+        }));
+        return found;
+      };
       // 캐시 기여는 로그인한 유저만(규칙도 동일하게 강제) — 비로그인 방문자는 캐시를 읽기만 하고,
       // 새로 번역된 문장은 로그인한 누군가가 그 언어로 방문할 때 자연스럽게 채워진다.
       // 실패해도(네트워크 문제 등) 화면엔 이미 번역문을 보여준 뒤라 조용히 무시한다.
@@ -8639,6 +8944,16 @@
             createdAt: serverTimestamp(),
           });
         } catch (err) { /* 이미 존재하면(동시에 두 유저가 같은 문장을 처음 번역) create 규칙 위반으로 조용히 실패 — 의도된 동작 */ }
+      };
+      // 방금 번역한 문장들을 공유 캐시에 한꺼번에 기여한다({원문: 번역문}).
+      // 규칙상 create만 허용이라 이미 있는 문장은 개별적으로 조용히 실패해야 해서(writeBatch를 쓰면
+      // 하나만 충돌해도 전부 롤백된다) 문서 단위로 따로 쓰되, 동시 요청 수만 30개로 제한한다.
+      window.__fbSetCachedTranslations = async function (lang, entries) {
+        if (!auth.currentUser || !entries) return;
+        const texts = Object.keys(entries).filter((t) => entries[t]);
+        for (let i = 0; i < texts.length; i += 30) {
+          await Promise.all(texts.slice(i, i + 30).map((t) => window.__fbSetCachedTranslation(lang, t, entries[t])));
+        }
       };
 
       // handleCredentialResponse(위쪽 스크립트)에서 구글 로그인 성공 시 호출됨:
