@@ -3111,6 +3111,88 @@
         // 기계 번역으로 처리됨.
         translationCache.en = { 'Unily로 연결된 사이예요': 'Connected on Unily' };
 
+        /* ---- 로컬 번역 캐시 (localStorage) ----
+           Gemini 할당량이 다 찼고 예비 엔드포인트까지 막힌 최악의 상황에서도 "언어를 고르면
+           화면이 바뀐다"를 지키는 마지막 방어선이다. 한 번이라도 번역해본 문장은 네트워크 없이
+           즉시 보여줄 수 있고, 브라우저를 닫았다 열어도 남는다.
+           Firestore 공유 캐시는 로그인한 유저만 쓸 수 있지만(보안 규칙), 이건 비로그인
+           방문자도 자기 브라우저에 쌓을 수 있다는 점이 다르다.
+           키 공간은 공유 캐시와 동일하게 "목적지 언어 + 원문"이라, UI 문구든 게시글 본문이든
+           같은 저장소를 쓴다. */
+        const LOCAL_CACHE_PREFIX = 'unily.tcache.';
+        const LOCAL_CACHE_MAX_ENTRIES = 2000; // 언어당 상한 (localStorage 용량 보호)
+        let localCacheDirtyLangs = {};
+        let localCacheSaveTimer = null;
+
+        const localCacheLoaded = {};
+        function loadLocalTranslationCache(lang) {
+            if (!lang || lang === 'ko' || localCacheLoaded[lang]) return;
+            localCacheLoaded[lang] = true; // 세션당 한 번만 읽는다 (이후엔 메모리 캐시가 최신)
+            translationCache[lang] = translationCache[lang] || {};
+            try {
+                const raw = localStorage.getItem(LOCAL_CACHE_PREFIX + lang);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                Object.keys(saved).forEach(src => {
+                    // 이미 이번 세션에서 받은 값(더 좋은 Gemini 번역일 수 있다)은 덮지 않는다.
+                    if (translationCache[lang][src] === undefined) translationCache[lang][src] = saved[src];
+                });
+            } catch (err) { /* 손상/차단(시크릿 모드 등)은 무시하고 빈 캐시로 시작 */ }
+        }
+
+        function saveLocalTranslationCache(lang) {
+            const cache = translationCache[lang];
+            if (!cache) return;
+            let keys = Object.keys(cache);
+            // 상한을 넘으면 최근에 들어온 것 위주로 남긴다(객체 키 순서 = 삽입 순서).
+            if (keys.length > LOCAL_CACHE_MAX_ENTRIES) keys = keys.slice(-LOCAL_CACHE_MAX_ENTRIES);
+            const write = (list) => {
+                const payload = {};
+                list.forEach(k => { payload[k] = cache[k]; });
+                localStorage.setItem(LOCAL_CACHE_PREFIX + lang, JSON.stringify(payload));
+            };
+            try {
+                write(keys);
+            } catch (err) {
+                // 용량 초과 등 — 절반만 남기고 한 번 더 시도. 그래도 안 되면 포기한다(치명적이지 않음).
+                try { write(keys.slice(-Math.floor(keys.length / 2))); } catch (err2) { /* 포기 */ }
+            }
+        }
+
+        function scheduleLocalTranslationCacheSave(lang) {
+            if (!lang || lang === 'ko') return;
+            localCacheDirtyLangs[lang] = true;
+            if (localCacheSaveTimer) return;
+            localCacheSaveTimer = setTimeout(() => {
+                localCacheSaveTimer = null;
+                const langs = Object.keys(localCacheDirtyLangs);
+                localCacheDirtyLangs = {};
+                langs.forEach(saveLocalTranslationCache);
+            }, 1500);
+        }
+
+        // 번역 결과를 메모리 + 로컬 캐시에 함께 기록한다. 실제로 바뀐 것만 돌려준다.
+        function rememberTranslations(lang, map) {
+            if (!lang || lang === 'ko' || !map) return {};
+            translationCache[lang] = translationCache[lang] || {};
+            const cache = translationCache[lang];
+            const changed = {};
+            Object.keys(map).forEach(src => {
+                const value = map[src];
+                if (typeof value !== 'string' || !value.trim()) return;
+                if (cache[src] === value) return;
+                cache[src] = value;
+                changed[src] = value;
+            });
+            if (Object.keys(changed).length) scheduleLocalTranslationCacheSave(lang);
+            return changed;
+        }
+
+        function getLocalTranslation(lang, text) {
+            const cache = translationCache[lang];
+            return cache ? cache[text] : undefined;
+        }
+
         function stripHtml(html) {
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
@@ -3147,20 +3229,60 @@
         const TRANSLATE_CHUNK_SIZE = 60;
         const inflightTranslations = {}; // { [lang]: { [원문]: Promise } } — 같은 문장을 두 번 요청하지 않도록
 
-        // ---- 예비 번역 경로 (구글 무료 엔드포인트) ----
-        // Gemini 호출이 실패했을 때(네트워크 오류, 할당량 초과, Firebase AI Logic API 미활성 등)의
-        // 예비 수단. 공식 지원 API가 아니라 언제든 막힐 수 있어 주 경로로는 쓰지 않는다.
+        // ---- 예비 번역 경로 ----
+        // Gemini가 못 쓰는 상황(무료 티어 분당 한도 소진, API 오류, 네트워크 문제)에서도
+        // "언어를 고르면 화면이 바뀐다"를 지켜야 하므로, 서로 다른 엔드포인트를 순서대로 시도한다.
+        // 앞 엔진이 돌려주지 못한 문장만 다음 엔진으로 넘어간다.
         //
-        // 이 엔드포인트는 q 파라미터를 여러 개 줘도 첫 번째만 번역해준다(확인함). 대신 문장들을
-        // 줄바꿈으로 이어 붙여 하나의 q로 보내면 줄 단위로 나뉘어 돌아오므로, 그걸로 묶음 처리한다.
-        // 그래야 언어 전환 한 번에 나가는 요청이 문장 수만큼(약 250건)이 아니라 십여 건으로 줄어든다.
-        const FALLBACK_QUERY_BUDGET = 4000; // 인코딩 후 q 길이 상한 (URL 약 3.9KB — 실측으로 안전 확인)
+        //  1) clients5 (dict-chrome-ex): q를 여러 개 받아 항목별로 각각 번역하고, 원문 언어도
+        //     항목마다 따로 감지한다. 한국어 문구와 영어 문구(프로젝트 모집 데이터, 관심분야
+        //     태그)가 섞여 있어도 안전하고, 줄바꿈이 든 게시글 본문도 그대로 처리된다.
+        //     실측: 한 요청에 120문장(URL 14KB)까지 정상.
+        //  2) gtx: clients5가 막혔을 때의 두 번째 줄. 다중 q를 지원하지 않아(첫 번째만 번역한다)
+        //     줄바꿈으로 이어 붙여 보내는데, 그러면 묶음 전체 단위로 언어가 감지되므로
+        //     한글이 든 문장과 아닌 문장을 갈라서 보내야 한다.
+        const CLIENTS5_URL_BUDGET = 6000; // URL 길이 상한 (실측 14KB까지 됐지만 여유를 둔다)
+        const FALLBACK_QUERY_BUDGET = 4000; // gtx: 인코딩 후 q 길이 상한 (URL 약 3.9KB)
 
+        // ---- 엔진 1: clients5 ----
+        async function translateViaClients5(texts, targetLang, sourceLang) {
+            const out = new Array(texts.length).fill(null);
+            const sl = sourceLang && sourceLang !== 'auto' ? sourceLang : 'auto';
+            const base = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(targetLang)}`;
+
+            const groups = [];
+            let current = [], currentLen = base.length;
+            texts.forEach((txt, i) => {
+                if (!txt || !txt.trim()) return;
+                const len = encodeURIComponent(txt).length + 3; // '&q=' 몫
+                if (current.length && currentLen + len > CLIENTS5_URL_BUDGET) {
+                    groups.push(current); current = []; currentLen = base.length;
+                }
+                current.push(i); currentLen += len;
+            });
+            if (current.length) groups.push(current);
+
+            await Promise.all(groups.map(async idxs => {
+                try {
+                    const url = base + idxs.map(i => '&q=' + encodeURIComponent(texts[i])).join('');
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    // 응답: [["번역문","감지된 원문 언어"], ...] — 입력 순서와 1:1
+                    if (!Array.isArray(data) || data.length !== idxs.length) return;
+                    idxs.forEach((i, k) => {
+                        const entry = data[k];
+                        const translated = Array.isArray(entry) ? entry[0] : entry;
+                        if (typeof translated === 'string' && translated.trim()) out[i] = translated;
+                    });
+                } catch (err) { /* 이 묶음은 다음 엔진에서 다시 시도된다 */ }
+            }));
+            return out;
+        }
+
+        // ---- 엔진 2: gtx (줄바꿈으로 묶어 보내고 줄 단위로 되돌린다) ----
         async function fallbackTranslateOne(text, targetLang, sourceLang) {
             try {
-                // sl을 ko로 고정하면 이미 영어로 적혀 있는 프로젝트 모집 데이터(역할/설명 등)가
-                // 다른 언어로 번역되지 않는 문제가 있어, 기본값은 원문 언어 자동 감지(auto)다.
-                const sl = sourceLang || 'auto';
+                const sl = sourceLang && sourceLang !== 'auto' ? sourceLang : 'auto';
                 const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
                 const res = await fetch(url);
                 const data = await res.json();
@@ -3171,12 +3293,11 @@
             }
         }
 
-        // 문장 여러 개를 줄바꿈으로 이어 한 번의 요청으로 번역하고, 줄 단위로 되돌려준다.
         // 줄 수가 입력과 다르면(번역기가 줄을 합치거나 쪼갠 경우) null을 돌려줘서 호출부가
         // 그 묶음만 한 건씩 다시 보내게 한다 — 엉뚱한 문장끼리 짝지어지는 것보다 낫다.
         async function fallbackTranslateJoined(texts, targetLang, sourceLang) {
             try {
-                const sl = sourceLang || 'auto';
+                const sl = sourceLang && sourceLang !== 'auto' ? sourceLang : 'auto';
                 const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(texts.join('\n'))}`;
                 const res = await fetch(url);
                 const data = await res.json();
@@ -3189,29 +3310,22 @@
             }
         }
 
-        // 문장 배열을 예비 경로로 번역해 [번역문|null] 배열로 돌려준다(입력과 같은 순서/길이).
-        //
-        // 주의: sl=auto는 "요청 하나" 단위로 언어를 감지한다. 그래서 한국어 문구와 영어 문구
-        // (프로젝트 모집 데이터, 관심분야 태그 등 이 앱에는 영어 원문도 섞여 있다)를 한 묶음으로
-        // 보내면 묶음 전체가 한국어로 감지되고 영어 줄은 번역되지 않은 채 그대로 돌아온다(실측 확인).
-        // 그래서 한글이 든 문장과 아닌 문장을 갈라서 서로 다른 요청으로 보낸다.
-        async function fallbackTranslateMany(texts, targetLang, sourceLang) {
+        async function translateViaGtx(texts, targetLang, sourceLang) {
             const out = new Array(texts.length).fill(null);
-            const hasHangul = (txt) => /[㄰-㆏가-힯]/.test(txt);
-            // 원문 언어가 명시된 호출(TranslationService)은 감지에 기대지 않으므로 가를 필요가 없다.
+            const hasHangul = (txt) => /[\u3130-\u318F\uAC00-\uD7AF]/.test(txt);
+            // 원문 언어가 명시된 호출은 감지에 기대지 않으므로 가를 필요가 없다.
             const bucketOf = (txt) => (sourceLang && sourceLang !== 'auto') ? 0 : (hasHangul(txt) ? 1 : 2);
 
-            // 줄바꿈이 든 문장(게시글 본문 등)은 줄 단위로 되돌릴 수 없으니 따로 한 건씩 보낸다.
             const groups = [];
-            const open = {}; // 버킷별로 채우는 중인 묶음 { [bucket]: { idxs, len } }
+            const open = {};
             texts.forEach((txt, i) => {
-                if (!txt || txt.includes('\n')) { groups.push([i]); return; }
+                if (!txt || !txt.trim()) return;
+                // 줄바꿈이 든 문장은 줄 단위로 되돌릴 수 없으니 따로 한 건씩 보낸다.
+                if (txt.includes('\n')) { groups.push([i]); return; }
                 const bucket = bucketOf(txt);
-                const len = encodeURIComponent(txt).length + 3; // +3 = 줄바꿈 인코딩(%0A) 몫
+                const len = encodeURIComponent(txt).length + 3;
                 let slot = open[bucket];
-                if (slot && slot.len + len > FALLBACK_QUERY_BUDGET) {
-                    groups.push(slot.idxs); slot = null;
-                }
+                if (slot && slot.len + len > FALLBACK_QUERY_BUDGET) { groups.push(slot.idxs); slot = null; }
                 if (!slot) slot = open[bucket] = { idxs: [], len: 0 };
                 slot.idxs.push(i); slot.len += len;
             });
@@ -3223,14 +3337,38 @@
                     return;
                 }
                 const lines = await fallbackTranslateJoined(idxs.map(i => texts[i]), targetLang, sourceLang);
-                if (lines) {
-                    idxs.forEach((i, k) => { out[i] = lines[k] || null; });
-                    return;
-                }
+                if (lines) { idxs.forEach((i, k) => { out[i] = lines[k] || null; }); return; }
                 await Promise.all(idxs.map(async i => {
                     out[i] = await fallbackTranslateOne(texts[i], targetLang, sourceLang);
                 }));
             }));
+            return out;
+        }
+
+        const FALLBACK_ENGINES = [translateViaClients5, translateViaGtx];
+
+        // 문장 배열을 예비 경로로 번역해 [번역문|null] 배열로 돌려준다(입력과 같은 순서/길이).
+        // 엔진을 순서대로 시도하고, 앞 엔진이 못 돌려준 문장만 다음 엔진에 넘긴다.
+        async function fallbackTranslateMany(texts, targetLang, sourceLang) {
+            const out = new Array(texts.length).fill(null);
+            let pending = texts.map((_, i) => i).filter(i => texts[i] && texts[i].trim());
+
+            for (const engine of FALLBACK_ENGINES) {
+                if (!pending.length) break;
+                let results;
+                try {
+                    results = await engine(pending.map(i => texts[i]), targetLang, sourceLang);
+                } catch (err) {
+                    continue; // 이 엔진은 통째로 실패 — 다음 엔진으로
+                }
+                const stillPending = [];
+                pending.forEach((srcIdx, k) => {
+                    const translated = results && results[k];
+                    if (typeof translated === 'string' && translated.trim()) out[srcIdx] = translated;
+                    else stillPending.push(srcIdx);
+                });
+                pending = stillPending;
+            }
             return out;
         }
 
@@ -3274,7 +3412,11 @@
         // 여러 문장을 묶어서 번역하고 캐시에 채운다.
         // onChunk: 묶음 하나가 도착할 때마다 호출 — 전체가 끝나기를 기다리지 않고 준비된 문장부터
         //          바로 화면에 나타나게 하는 고리다.
-        async function translateBatch(texts, targetLang, onChunk) {
+        // 엔진이 전부 실패했을 때 조용히 다시 시도하는 간격. 유저가 언어 버튼을 또 누르지
+        // 않아도 화면이 스스로 채워지게 하는 장치다(엔드포인트 일시 차단 등에 대비).
+        const TRANSLATE_RETRY_DELAYS = [4000, 15000];
+
+        async function translateBatch(texts, targetLang, onChunk, retryDepth) {
             if (targetLang === 'ko') return;
             translationCache[targetLang] = translationCache[targetLang] || {};
             inflightTranslations[targetLang] = inflightTranslations[targetLang] || {};
@@ -3295,7 +3437,7 @@
                 if (window.__fbGetCachedTranslations) {
                     try {
                         const shared = await window.__fbGetCachedTranslations(targetLang, missing);
-                        Object.keys(shared || {}).forEach(src => { cache[src] = shared[src]; });
+                        rememberTranslations(targetLang, shared);
                     } catch (err) { /* 공유 캐시 조회 실패는 무시 */ }
                 }
                 const remaining = missing.filter(txt => cache[txt] === undefined);
@@ -3313,14 +3455,11 @@
                         // Gemini 결과가 이미 들어왔다면 뒤늦은 예비 번역으로 덮지 않는다.
                         if (!fromAI && aiApplied) return;
                         if (fromAI) aiApplied = true;
-                        const fresh = {};
-                        chunk.forEach((src, i) => {
-                            const translated = results && results[i];
-                            if (typeof translated !== 'string' || !translated.trim()) return;
-                            if (cache[src] === translated) return;
-                            cache[src] = translated;
-                            if (fromAI) fresh[src] = translated;
-                        });
+                        const incoming = {};
+                        chunk.forEach((src, i) => { incoming[src] = results && results[i]; });
+                        // 메모리 + localStorage에 함께 기록한다 — 다음 방문 때는 네트워크가
+                        // 통째로 막혀 있어도 이 문장들은 바로 새 언어로 보인다.
+                        const fresh = rememberTranslations(targetLang, incoming);
                         if (onChunk) onChunk();
                         // 공유 캐시(Firestore)에는 Gemini 결과만 기여한다. 보안 규칙상 create만 되고
                         // 덮어쓰기가 안 되므로, 예비 번역을 먼저 넣어버리면 그 품질이 이후 모든
@@ -3340,6 +3479,15 @@
             });
 
             await Promise.all([work, ...waits]);
+
+            // 모든 엔진이 실패해 아직 원문 그대로인 문장이 남아 있으면 잠시 뒤 다시 시도한다.
+            const depth = retryDepth || 0;
+            const stillMissing = missing.filter(txt => cache[txt] === undefined);
+            if (stillMissing.length && depth < TRANSLATE_RETRY_DELAYS.length) {
+                setTimeout(() => {
+                    translateBatch(stillMissing, targetLang, onChunk, depth + 1).catch(() => {});
+                }, TRANSLATE_RETRY_DELAYS[depth]);
+            }
         }
 
         // 문장 하나를 번역해서 캐시에 저장 (이미 캐시에 있으면 네트워크 요청 없이 바로 반환).
@@ -3535,6 +3683,9 @@
             try { localStorage.setItem('unily.lang', langCode); } catch (err) { /* 시크릿 모드 등 저장 불가는 무시 */ }
 
             syncLanguageControls(langCode);
+            // 지난번에 이 언어로 받아둔 번역을 먼저 꺼내 온다. 그래야 Gemini 할당량이 다 찼거나
+            // 예비 엔드포인트까지 막힌 상황, 심지어 오프라인이어도 첫 화면부터 새 언어로 보인다.
+            loadLocalTranslationCache(langCode);
             applyCurrentLanguageToUI();
             if (langCode === 'ko') { document.body.classList.remove('lang-loading'); return; }
 
@@ -7381,12 +7532,20 @@
             // 문장 묶음 하나를 처리해서 { 원문: 번역문 }으로 돌려준다.
             async function translateGroup(texts, sourceLang, targetLang) {
                 const out = {};
-                // 1) 다른 유저/이전 세션이 이미 번역해둔 문장은 Gemini를 부르지 않는다.
-                //    (공유 캐시는 UI 문구용 translateText와 같은 저장소를 쓴다 — 목적지 언어 + 원문 기준)
-                if (window.__fbGetCachedTranslations) {
+                // 1) 이 브라우저가 지난번에 받아둔 번역(localStorage) — 네트워크가 통째로 막혀도 쓸 수 있다.
+                //    UI 문구용 캐시와 같은 저장소를 쓴다(목적지 언어 + 원문 기준).
+                loadLocalTranslationCache(targetLang);
+                texts.forEach(t => {
+                    const local = getLocalTranslation(targetLang, t);
+                    if (local !== undefined) out[t] = local;
+                });
+                // 2) 다른 유저/이전 세션이 이미 번역해둔 문장(Firestore 공유 캐시)
+                const needShared = texts.filter(t => out[t] === undefined);
+                if (needShared.length && window.__fbGetCachedTranslations) {
                     try {
-                        const shared = await window.__fbGetCachedTranslations(targetLang, texts);
+                        const shared = await window.__fbGetCachedTranslations(targetLang, needShared);
                         Object.keys(shared || {}).forEach(src => { out[src] = shared[src]; });
+                        rememberTranslations(targetLang, shared);
                     } catch (err) { /* 공유 캐시 조회 실패는 무시 */ }
                 }
                 const need = texts.filter(t => out[t] === undefined);
@@ -7401,6 +7560,8 @@
                         if (typeof v === 'string' && v.trim()) { out[t] = v; fresh[t] = v; }
                         else { out[t] = t; }
                     });
+                    // 공유 캐시(Firestore)에는 Gemini 결과만, 로컬 캐시에는 무엇이든 기록한다.
+                    rememberTranslations(targetLang, fresh);
                     if (window.__fbSetCachedTranslations && Object.keys(fresh).length) {
                         window.__fbSetCachedTranslations(targetLang, fresh);
                     }
@@ -7409,10 +7570,13 @@
                     if (err && err.__geminiBudget) console.debug(err.message);
                     else console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
                     const results = await fallbackTranslateAll(need, sourceLang, targetLang);
+                    const gained = {};
                     need.forEach((t, i) => {
                         const v = results[i];
-                        out[t] = (typeof v === 'string' && v.trim()) ? v : t;
+                        if (typeof v === 'string' && v.trim()) { out[t] = v; gained[t] = v; }
+                        else { out[t] = t; }
                     });
+                    rememberTranslations(targetLang, gained);
                 }
                 return out;
             }

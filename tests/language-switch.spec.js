@@ -98,22 +98,24 @@ test.describe('언어 전환', () => {
     await expect(page.locator('#footerLangSelect')).toHaveValue('en');
   });
 
-  // Gemini가 막혀 있을 때(할당량 초과, Firebase AI Logic API 미활성 등) 쓰이는 예비 경로.
-  // 문장들을 줄바꿈으로 이어 한 요청으로 보내는데, sl=auto는 "요청 하나" 단위로 언어를 감지하므로
-  // 한국어와 영어를 한 묶음에 섞으면 묶음 전체가 한국어로 감지돼 영어 줄이 번역되지 않고 돌아온다.
-  // 그래서 한글이 든 문장과 아닌 문장은 반드시 다른 요청으로 나가야 한다.
-  test('예비 번역 경로는 한국어와 영어를 같은 요청에 섞지 않는다', async ({ page }) => {
+  // Gemini가 막혀 있을 때(할당량 소진, API 오류, 네트워크 문제) 쓰이는 예비 경로는 엔진이 둘이다.
+  //  1) clients5: q를 여러 개 받아 항목별로 번역하고 원문 언어도 항목마다 따로 감지한다.
+  //  2) gtx: clients5가 막혔을 때의 두 번째 줄. 다중 q를 지원하지 않아 줄바꿈으로 묶는데,
+  //     그러면 묶음 전체 단위로 언어가 감지돼 한/영을 섞으면 영어 줄이 번역되지 않고 돌아온다.
+  test('1차 예비 엔진(clients5)은 한/영이 섞여도 한 요청으로 항목별 번역한다', async ({ page }) => {
     await gotoApp(page);
 
     const result = await page.evaluate(async () => {
       const sent = [];
       const realFetch = window.fetch;
-      window.fetch = async (url) => {
-        const q = decodeURIComponent(new URL(url).searchParams.get('q'));
-        sent.push(q);
-        // gtx 엔드포인트 응답 모양(줄마다 한 덩어리, 끝에 줄바꿈)을 흉내낸다.
-        const chunks = q.split('\n').map((line) => [`T(${line})\n`]);
-        return { json: async () => [chunks] };
+      window.fetch = async (url, ...rest) => {
+        if (typeof url === 'string' && url.includes('clients5.google.com')) {
+          const qs = new URL(url).searchParams.getAll('q');
+          sent.push(qs);
+          // clients5 응답 모양: [["번역문","감지된 원문 언어"], ...]
+          return { json: async () => qs.map((q) => [`C5(${q})`, 'ko']) };
+        }
+        return realFetch.call(window, url, ...rest);
       };
       try {
         const inputs = ['홈', 'Dream Exchange', '커뮤니티', 'Global Networking', '마이페이지', 'Research'];
@@ -124,18 +126,76 @@ test.describe('언어 전환', () => {
       }
     });
 
-    const HANGUL = /[㄰-㆏가-힯]/;
-    // 요청 하나에 실린 줄들은 전부 한글이거나 전부 한글이 아니어야 한다.
+    // 한 요청에 6개가 그대로 실리고, 결과는 입력과 같은 순서·길이로 돌아온다.
+    expect(result.sent.length).toBe(1);
+    expect(result.sent[0]).toEqual(result.inputs);
+    expect(result.out).toEqual(result.inputs.map((t) => `C5(${t})`));
+  });
+
+  test('clients5가 실패하면 gtx로 넘어가고, 거기선 한국어와 영어를 같은 요청에 섞지 않는다', async ({ page }) => {
+    await gotoApp(page);
+
+    const result = await page.evaluate(async () => {
+      const sent = [];
+      const realFetch = window.fetch;
+      window.fetch = async (url, ...rest) => {
+        if (typeof url === 'string' && url.includes('clients5.google.com')) {
+          throw new Error('clients5 down');  // 1차 엔진이 죽은 상황
+        }
+        if (typeof url === 'string' && url.includes('translate.googleapis.com')) {
+          const q = decodeURIComponent(new URL(url).searchParams.get('q'));
+          sent.push(q);
+          // gtx 응답 모양(줄마다 한 덩어리, 끝에 줄바꿈)
+          return { json: async () => [q.split('\n').map((line) => [`T(${line})\n`])] };
+        }
+        return realFetch.call(window, url, ...rest);
+      };
+      try {
+        const inputs = ['홈', 'Dream Exchange', '커뮤니티', 'Global Networking', '마이페이지', 'Research'];
+        const out = await window.fallbackTranslateMany(inputs, 'ja');
+        return { sent, out, inputs };
+      } finally {
+        window.fetch = realFetch;
+      }
+    });
+
+    const HANGUL = /[\u3130-\u318F\uAC00-\uD7AF]/;
     for (const q of result.sent) {
       const lines = q.split('\n');
       const withHangul = lines.filter((l) => HANGUL.test(l)).length;
       expect(withHangul === 0 || withHangul === lines.length,
         `한 요청에 한국어와 영어가 섞였다: ${JSON.stringify(lines)}`).toBe(true);
     }
-    // 그러면서도 결과는 입력과 같은 순서·길이로 돌아와야 한다(줄 정렬이 틀어지면 안 됨).
+    // 1차 엔진이 죽어도 결과는 빠짐없이, 입력과 같은 순서로 채워져야 한다.
     expect(result.out).toEqual(result.inputs.map((t) => `T(${t})`));
-    // 6개 문장이 한글/비한글 2개 요청으로만 나갔는지 (문장마다 한 건씩이 아니라)
-    expect(result.sent.length).toBe(2);
+    expect(result.sent.length).toBe(2); // 한글 묶음 + 비한글 묶음
+  });
+
+  test('모든 번역 엔진이 죽어도, 전에 본 적 있는 언어는 저장해둔 번역으로 즉시 바뀐다', async ({ page }) => {
+    // 1회차: 정상적으로 번역해서 localStorage에 쌓는다.
+    await page.addInitScript(() => {
+      window.__aiTranslateBatch = async (texts, s, t) => texts.map((x) => `AI(${x})`);
+    });
+    await gotoApp(page);
+    await page.click('.btn-lang:has-text("日本語")');
+    await expect(page.locator('#nav-home')).toHaveText('AI(홈)', { timeout: 15000 });
+    // 저장 디바운스(1.5초)가 끝날 때까지 기다린다
+    await page.waitForFunction(
+      () => { try { return !!localStorage.getItem('unily.tcache.ja'); } catch (e) { return false; } },
+      { timeout: 10000 }
+    );
+
+    // 2회차: 새로고침 + 번역 수단을 전부 끊는다(Gemini 미등록 + 모든 fetch 실패).
+    await page.addInitScript(() => {
+      delete window.__aiTranslateBatch;
+      window.__aiTranslate = undefined;
+      window.fetch = async () => { throw new Error('offline'); };
+    });
+    await page.reload();
+    await page.waitForSelector('#card-grid .student-card');
+
+    // 저장된 언어가 복원되면서, 네트워크 없이도 화면이 일본어로 떠야 한다.
+    await expect(page.locator('#nav-home')).toHaveText('AI(홈)', { timeout: 10000 });
   });
 
   // Gemini 무료 티어는 분당 5요청이고, 문장을 크게 묶으면 한 호출에 20초 넘게 걸리거나
