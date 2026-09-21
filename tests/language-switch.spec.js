@@ -138,6 +138,36 @@ test.describe('언어 전환', () => {
     expect(result.sent.length).toBe(2);
   });
 
+  // Gemini 무료 티어는 분당 5요청이고, 문장을 크게 묶으면 한 호출에 20초 넘게 걸리거나
+  // 모델 과부하로 500이 나기도 한다(실측). 그동안 원문이 그대로 떠 있으면 "언어를 골라도
+  // 안 바뀐다"는 체감이 그대로 돌아오므로, 예비 번역으로 먼저 채우고 나중에 갈아끼워야 한다.
+  test('Gemini가 늦으면 예비 번역으로 먼저 채우고, 도착하면 Gemini 번역으로 갈아끼운다', async ({ page }) => {
+    test.setTimeout(90000);
+    await page.addInitScript(() => {
+      // Gemini: 소프트 타임아웃(6초)보다 한참 느리게 응답
+      window.__aiTranslateBatch = async (texts) => {
+        await new Promise((r) => setTimeout(r, 9000));
+        return texts.map((t) => `AI(${t})`);
+      };
+      // 예비 경로(구글 무료 엔드포인트): 즉시 응답
+      const realFetch = window.fetch;
+      window.fetch = async (url, ...rest) => {
+        if (typeof url === 'string' && url.includes('translate.googleapis.com')) {
+          const q = decodeURIComponent(new URL(url).searchParams.get('q'));
+          return { json: async () => [q.split('\n').map((line) => [`FB(${line})\n`])] };
+        }
+        return realFetch.call(window, url, ...rest);
+      };
+    });
+    await gotoApp(page);
+
+    await page.click('.btn-lang:has-text("日本語")');
+    // 1) Gemini를 끝까지 기다리지 않고 예비 번역이 먼저 화면을 채운다
+    await expect(page.locator('#nav-home')).toHaveText('FB(홈)', { timeout: 8500 });
+    // 2) 뒤늦게 도착한 Gemini 번역으로 갈아끼운다
+    await expect(page.locator('#nav-home')).toHaveText('AI(홈)', { timeout: 30000 });
+  });
+
   test('언어를 전환하는 동안 콘솔 에러가 나지 않는다', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(String(err)));

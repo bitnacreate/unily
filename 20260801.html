@@ -3141,7 +3141,10 @@
         // → 3) Gemini 일괄 번역 → 4) 실패 시 구글 비공식 엔드포인트(예비)
         // 예전에는 문장 하나하나가 이 단계를 각자 밟아서, 언어 전환 한 번에 Gemini 호출 수백 개가
         // 동시에 나갔다(= 할당량 초과 → 대부분 실패 → 화면은 계속 한국어). 이제는 묶어서 처리한다.
-        const TRANSLATE_CHUNK_SIZE = 25;
+        // 한 번의 Gemini 호출에 넣는 문장 수. 무료 티어가 분당 5요청이라(모듈 스크립트의
+        // GEMINI_RPM_BUDGET 주석 참고) 요청 수를 최대한 줄여야 해서 크게 잡는다 —
+        // 사이트 전체(약 220문장)가 4번의 호출로 끝나 분당 예산 안에 들어온다.
+        const TRANSLATE_CHUNK_SIZE = 60;
         const inflightTranslations = {}; // { [lang]: { [원문]: Promise } } — 같은 문장을 두 번 요청하지 않도록
 
         // ---- 예비 번역 경로 (구글 무료 엔드포인트) ----
@@ -3231,15 +3234,41 @@
             return out;
         }
 
-        // 문장 묶음 하나를 번역해 [번역문|null] 배열로 돌려준다.
-        async function translateChunk(chunk, targetLang) {
-            try {
-                if (!window.__aiTranslateBatch) throw new Error('AI translate not ready');
-                return await window.__aiTranslateBatch(chunk, 'auto', targetLang);
-            } catch (err) {
-                console.error('Gemini 일괄 번역 실패, 예비 번역으로 대체:', err);
+        // Gemini가 이 시간 안에 답하지 않으면 일단 예비 번역으로 화면부터 채운다.
+        // (문장을 크게 묶으면 20초 넘게 걸리기도 하고 모델 과부하로 500이 나기도 하는데,
+        //  그동안 원문이 그대로 떠 있으면 "언어를 골라도 안 바뀐다"는 체감이 그대로 돌아온다.)
+        const GEMINI_SOFT_TIMEOUT_MS = 6000;
+
+        // 문장 묶음 하나를 번역한다.
+        //  - 반환: { results: [번역문|null], fromAI: Gemini 결과인지 }
+        //  - onLateUpgrade: 예비 번역으로 먼저 채운 뒤 Gemini 결과가 뒤늦게 도착하면 호출된다.
+        async function translateChunk(chunk, targetLang, onLateUpgrade) {
+            const TIMED_OUT = Symbol('timeout');
+            let aiPromise = null;
+
+            if (window.__aiTranslateBatch) {
+                aiPromise = window.__aiTranslateBatch(chunk, 'auto', targetLang).catch(err => {
+                    // 분당 예산을 아껴 쓰느라 의도적으로 건너뛴 경우는 "실패"가 아니므로 조용히 넘어간다.
+                    if (err && err.__geminiBudget) console.debug(err.message);
+                    else console.error('Gemini 일괄 번역 실패, 예비 번역으로 대체:', err);
+                    return null;
+                });
+                const raced = await Promise.race([
+                    aiPromise,
+                    new Promise(resolve => setTimeout(() => resolve(TIMED_OUT), GEMINI_SOFT_TIMEOUT_MS)),
+                ]);
+                if (raced !== TIMED_OUT) {
+                    if (raced) return { results: raced, fromAI: true };
+                    aiPromise = null; // 이미 실패로 끝났으니 나중에 덮어쓸 일도 없다
+                }
             }
-            return await fallbackTranslateMany(chunk, targetLang);
+
+            // 여기까지 왔으면 Gemini가 실패했거나 아직 안 온 것 — 예비 번역으로 화면부터 채우고,
+            // 늦게 도착한 Gemini 결과는 도착하는 대로 갈아끼운다.
+            if (aiPromise && onLateUpgrade) {
+                aiPromise.then(late => { if (late) onLateUpgrade(late); });
+            }
+            return { results: await fallbackTranslateMany(chunk, targetLang), fromAI: false };
         }
 
         // 여러 문장을 묶어서 번역하고 캐시에 채운다.
@@ -3279,19 +3308,29 @@
                     chunks.push(remaining.slice(i, i + TRANSLATE_CHUNK_SIZE));
                 }
                 await Promise.all(chunks.map(async chunk => {
-                    const out = await translateChunk(chunk, targetLang);
-                    const fresh = {};
-                    chunk.forEach((src, i) => {
-                        const translated = out && out[i];
-                        if (typeof translated === 'string' && translated.trim()) {
+                    let aiApplied = false;
+                    const apply = (results, fromAI) => {
+                        // Gemini 결과가 이미 들어왔다면 뒤늦은 예비 번역으로 덮지 않는다.
+                        if (!fromAI && aiApplied) return;
+                        if (fromAI) aiApplied = true;
+                        const fresh = {};
+                        chunk.forEach((src, i) => {
+                            const translated = results && results[i];
+                            if (typeof translated !== 'string' || !translated.trim()) return;
+                            if (cache[src] === translated) return;
                             cache[src] = translated;
-                            fresh[src] = translated;
+                            if (fromAI) fresh[src] = translated;
+                        });
+                        if (onChunk) onChunk();
+                        // 공유 캐시(Firestore)에는 Gemini 결과만 기여한다. 보안 규칙상 create만 되고
+                        // 덮어쓰기가 안 되므로, 예비 번역을 먼저 넣어버리면 그 품질이 이후 모든
+                        // 유저에게 영구히 박혀서 Gemini를 켜둔 의미가 사라진다.
+                        if (fromAI && window.__fbSetCachedTranslations && Object.keys(fresh).length) {
+                            window.__fbSetCachedTranslations(targetLang, fresh);
                         }
-                    });
-                    if (onChunk) onChunk();
-                    if (window.__fbSetCachedTranslations && Object.keys(fresh).length) {
-                        window.__fbSetCachedTranslations(targetLang, fresh);
-                    }
+                    };
+                    const { results, fromAI } = await translateChunk(chunk, targetLang, late => apply(late, true));
+                    apply(results, fromAI);
                 }));
             })();
 
@@ -7366,7 +7405,9 @@
                         window.__fbSetCachedTranslations(targetLang, fresh);
                     }
                 } catch (err) {
-                    console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
+                    // 분당 예산을 아껴 쓰느라 의도적으로 건너뛴 경우는 "실패"가 아니므로 조용히 넘어간다.
+                    if (err && err.__geminiBudget) console.debug(err.message);
+                    else console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
                     const results = await fallbackTranslateAll(need, sourceLang, targetLang);
                     need.forEach((t, i) => {
                         const v = results[i];
@@ -8894,14 +8935,62 @@
         const msg = String((err && (err.message || err.code)) || "");
         return /not found|not_found|404|does not exist|not supported|unsupported|permission[_ -]?denied|403/i.test(msg);
       }
+
+      /* ------------------------------------------------------------------
+         Gemini 분당 요청 제한
+         무료 티어는 "모델당 분당 5요청"이 상한이다(429 응답에 박혀 오는
+         GenerateRequestsPerMinutePerProjectPerModel-FreeTier, quotaValue 5).
+         번역할 문장이 수백 개라 묶어 보내도 요청이 몇 건은 나가는데, 그걸 한꺼번에 던지면
+         대부분 429를 맞고 통째로 예비 경로로 새어버린다(= Gemini 번역 품질을 못 쓴다).
+         그래서 여기서 분당 요청 수를 직접 지키고, 예산을 넘는 요청은 "기다리게" 하지 않고
+         곧바로 실패시켜 호출부가 예비 경로로 넘어가게 한다 — 화면이 멈추는 것보다
+         일부 문장이 조금 덜 매끄럽게 번역되는 편이 낫다.
+         (유료 티어로 올리면 GEMINI_RPM_BUDGET만 키우면 된다.)
+         ------------------------------------------------------------------ */
+      const GEMINI_RPM_BUDGET = 4; // 무료 티어 상한 5보다 하나 낮게 — 여유분을 남겨둔다
+      let geminiCallTimes = [];    // 최근 1분간 실제로 나간 요청 시각
+      let geminiCooldownUntil = 0; // 429를 맞았을 때 쉬어야 하는 시각
+
+      function isRateLimited(err) {
+        const msg = String((err && (err.message || err.code)) || "");
+        return /\b429\b|RESOURCE_EXHAUSTED|exceeded your current quota/i.test(msg);
+      }
+      function noteRateLimited(err) {
+        const msg = String((err && err.message) || "");
+        // 응답이 알려주는 재시도 대기시간을 그대로 따른다 (없으면 60초).
+        const m = msg.match(/retry in ([\d.]+)s/i) || msg.match(/"retryDelay":\s*"(\d+)s"/i);
+        const secs = m ? Number(m[1]) : 60;
+        geminiCooldownUntil = Date.now() + (isFinite(secs) && secs > 0 ? secs : 60) * 1000 + 1000;
+        geminiCallTimes = [];
+        console.warn(`Gemini 할당량 초과 — ${Math.round((geminiCooldownUntil - Date.now()) / 1000)}초간 예비 번역으로 처리합니다.`);
+      }
+      function takeGeminiSlot() {
+        const now = Date.now();
+        if (now < geminiCooldownUntil) return false;
+        geminiCallTimes = geminiCallTimes.filter((t) => now - t < 60000);
+        if (geminiCallTimes.length >= GEMINI_RPM_BUDGET) return false;
+        geminiCallTimes.push(now);
+        return true;
+      }
+      function budgetError() {
+        const err = new Error("Gemini 분당 요청 예산 소진 — 이번 묶음은 예비 번역으로 처리");
+        err.__geminiBudget = true; // 호출부가 "진짜 실패"와 구분해 조용히 넘어가도록
+        return err;
+      }
+
       async function generateTranslation(prompt, jsonMode) {
         let lastErr;
         for (let attempt = translateModelIdx; attempt < TRANSLATE_MODEL_IDS.length; attempt++) {
+          if (!takeGeminiSlot()) throw budgetError();
           try {
             const result = await translateModel(jsonMode).generateContent(prompt);
             return result.response.text();
           } catch (err) {
             lastErr = err;
+            if (isRateLimited(err)) {
+              noteRateLimited(err);
+              throw err;
+            }
             if (isModelUnavailable(err) && translateModelIdx < TRANSLATE_MODEL_IDS.length - 1) {
               console.warn(`Gemini 모델 ${TRANSLATE_MODEL_IDS[translateModelIdx]} 사용 불가 → 다음 후보로 전환`, err);
               translateModelIdx++;
