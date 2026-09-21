@@ -98,6 +98,46 @@ test.describe('언어 전환', () => {
     await expect(page.locator('#footerLangSelect')).toHaveValue('en');
   });
 
+  // Gemini가 막혀 있을 때(할당량 초과, Firebase AI Logic API 미활성 등) 쓰이는 예비 경로.
+  // 문장들을 줄바꿈으로 이어 한 요청으로 보내는데, sl=auto는 "요청 하나" 단위로 언어를 감지하므로
+  // 한국어와 영어를 한 묶음에 섞으면 묶음 전체가 한국어로 감지돼 영어 줄이 번역되지 않고 돌아온다.
+  // 그래서 한글이 든 문장과 아닌 문장은 반드시 다른 요청으로 나가야 한다.
+  test('예비 번역 경로는 한국어와 영어를 같은 요청에 섞지 않는다', async ({ page }) => {
+    await gotoApp(page);
+
+    const result = await page.evaluate(async () => {
+      const sent = [];
+      const realFetch = window.fetch;
+      window.fetch = async (url) => {
+        const q = decodeURIComponent(new URL(url).searchParams.get('q'));
+        sent.push(q);
+        // gtx 엔드포인트 응답 모양(줄마다 한 덩어리, 끝에 줄바꿈)을 흉내낸다.
+        const chunks = q.split('\n').map((line) => [`T(${line})\n`]);
+        return { json: async () => [chunks] };
+      };
+      try {
+        const inputs = ['홈', 'Dream Exchange', '커뮤니티', 'Global Networking', '마이페이지', 'Research'];
+        const out = await window.fallbackTranslateMany(inputs, 'ja');
+        return { sent, out, inputs };
+      } finally {
+        window.fetch = realFetch;
+      }
+    });
+
+    const HANGUL = /[㄰-㆏가-힯]/;
+    // 요청 하나에 실린 줄들은 전부 한글이거나 전부 한글이 아니어야 한다.
+    for (const q of result.sent) {
+      const lines = q.split('\n');
+      const withHangul = lines.filter((l) => HANGUL.test(l)).length;
+      expect(withHangul === 0 || withHangul === lines.length,
+        `한 요청에 한국어와 영어가 섞였다: ${JSON.stringify(lines)}`).toBe(true);
+    }
+    // 그러면서도 결과는 입력과 같은 순서·길이로 돌아와야 한다(줄 정렬이 틀어지면 안 됨).
+    expect(result.out).toEqual(result.inputs.map((t) => `T(${t})`));
+    // 6개 문장이 한글/비한글 2개 요청으로만 나갔는지 (문장마다 한 건씩이 아니라)
+    expect(result.sent.length).toBe(2);
+  });
+
   test('언어를 전환하는 동안 콘솔 에러가 나지 않는다', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(String(err)));

@@ -3144,13 +3144,21 @@
         const TRANSLATE_CHUNK_SIZE = 25;
         const inflightTranslations = {}; // { [lang]: { [원문]: Promise } } — 같은 문장을 두 번 요청하지 않도록
 
-        // 구글 무료 번역 엔드포인트: Gemini 호출이 실패했을 때(네트워크 오류, 할당량 초과, 모델 미지원 등)의
+        // ---- 예비 번역 경로 (구글 무료 엔드포인트) ----
+        // Gemini 호출이 실패했을 때(네트워크 오류, 할당량 초과, Firebase AI Logic API 미활성 등)의
         // 예비 수단. 공식 지원 API가 아니라 언제든 막힐 수 있어 주 경로로는 쓰지 않는다.
-        async function fallbackTranslateOne(text, targetLang) {
+        //
+        // 이 엔드포인트는 q 파라미터를 여러 개 줘도 첫 번째만 번역해준다(확인함). 대신 문장들을
+        // 줄바꿈으로 이어 붙여 하나의 q로 보내면 줄 단위로 나뉘어 돌아오므로, 그걸로 묶음 처리한다.
+        // 그래야 언어 전환 한 번에 나가는 요청이 문장 수만큼(약 250건)이 아니라 십여 건으로 줄어든다.
+        const FALLBACK_QUERY_BUDGET = 4000; // 인코딩 후 q 길이 상한 (URL 약 3.9KB — 실측으로 안전 확인)
+
+        async function fallbackTranslateOne(text, targetLang, sourceLang) {
             try {
-                // sl=ko로 고정하면 이미 영어로 적혀 있는 프로젝트 모집 데이터(역할/설명 등)가
-                // 다른 언어로 번역되지 않는 문제가 있어, 원문 언어를 자동 감지하도록 auto를 쓴다.
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
+                // sl을 ko로 고정하면 이미 영어로 적혀 있는 프로젝트 모집 데이터(역할/설명 등)가
+                // 다른 언어로 번역되지 않는 문제가 있어, 기본값은 원문 언어 자동 감지(auto)다.
+                const sl = sourceLang || 'auto';
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
                 const res = await fetch(url);
                 const data = await res.json();
                 const translated = (data[0] || []).map(chunk => chunk[0]).join('');
@@ -3158,6 +3166,69 @@
             } catch (err) {
                 return null; // null은 캐시에 넣지 않아 다음 기회에 다시 시도된다
             }
+        }
+
+        // 문장 여러 개를 줄바꿈으로 이어 한 번의 요청으로 번역하고, 줄 단위로 되돌려준다.
+        // 줄 수가 입력과 다르면(번역기가 줄을 합치거나 쪼갠 경우) null을 돌려줘서 호출부가
+        // 그 묶음만 한 건씩 다시 보내게 한다 — 엉뚱한 문장끼리 짝지어지는 것보다 낫다.
+        async function fallbackTranslateJoined(texts, targetLang, sourceLang) {
+            try {
+                const sl = sourceLang || 'auto';
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(texts.join('\n'))}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const joined = (data[0] || []).map(chunk => chunk[0]).join('');
+                if (!joined) return null;
+                const lines = joined.replace(/\n+$/, '').split('\n').map(line => line.trim());
+                return lines.length === texts.length ? lines : null;
+            } catch (err) {
+                return null;
+            }
+        }
+
+        // 문장 배열을 예비 경로로 번역해 [번역문|null] 배열로 돌려준다(입력과 같은 순서/길이).
+        //
+        // 주의: sl=auto는 "요청 하나" 단위로 언어를 감지한다. 그래서 한국어 문구와 영어 문구
+        // (프로젝트 모집 데이터, 관심분야 태그 등 이 앱에는 영어 원문도 섞여 있다)를 한 묶음으로
+        // 보내면 묶음 전체가 한국어로 감지되고 영어 줄은 번역되지 않은 채 그대로 돌아온다(실측 확인).
+        // 그래서 한글이 든 문장과 아닌 문장을 갈라서 서로 다른 요청으로 보낸다.
+        async function fallbackTranslateMany(texts, targetLang, sourceLang) {
+            const out = new Array(texts.length).fill(null);
+            const hasHangul = (txt) => /[㄰-㆏가-힯]/.test(txt);
+            // 원문 언어가 명시된 호출(TranslationService)은 감지에 기대지 않으므로 가를 필요가 없다.
+            const bucketOf = (txt) => (sourceLang && sourceLang !== 'auto') ? 0 : (hasHangul(txt) ? 1 : 2);
+
+            // 줄바꿈이 든 문장(게시글 본문 등)은 줄 단위로 되돌릴 수 없으니 따로 한 건씩 보낸다.
+            const groups = [];
+            const open = {}; // 버킷별로 채우는 중인 묶음 { [bucket]: { idxs, len } }
+            texts.forEach((txt, i) => {
+                if (!txt || txt.includes('\n')) { groups.push([i]); return; }
+                const bucket = bucketOf(txt);
+                const len = encodeURIComponent(txt).length + 3; // +3 = 줄바꿈 인코딩(%0A) 몫
+                let slot = open[bucket];
+                if (slot && slot.len + len > FALLBACK_QUERY_BUDGET) {
+                    groups.push(slot.idxs); slot = null;
+                }
+                if (!slot) slot = open[bucket] = { idxs: [], len: 0 };
+                slot.idxs.push(i); slot.len += len;
+            });
+            Object.keys(open).forEach(k => { if (open[k].idxs.length) groups.push(open[k].idxs); });
+
+            await Promise.all(groups.map(async idxs => {
+                if (idxs.length === 1) {
+                    out[idxs[0]] = await fallbackTranslateOne(texts[idxs[0]], targetLang, sourceLang);
+                    return;
+                }
+                const lines = await fallbackTranslateJoined(idxs.map(i => texts[i]), targetLang, sourceLang);
+                if (lines) {
+                    idxs.forEach((i, k) => { out[i] = lines[k] || null; });
+                    return;
+                }
+                await Promise.all(idxs.map(async i => {
+                    out[i] = await fallbackTranslateOne(texts[i], targetLang, sourceLang);
+                }));
+            }));
+            return out;
         }
 
         // 문장 묶음 하나를 번역해 [번역문|null] 배열로 돌려준다.
@@ -3168,7 +3239,7 @@
             } catch (err) {
                 console.error('Gemini 일괄 번역 실패, 예비 번역으로 대체:', err);
             }
-            return await Promise.all(chunk.map(txt => fallbackTranslateOne(txt, targetLang)));
+            return await fallbackTranslateMany(chunk, targetLang);
         }
 
         // 여러 문장을 묶어서 번역하고 캐시에 채운다.
@@ -7260,12 +7331,12 @@
                 return bucket ? bucket[text] : undefined;
             }
 
-            // 구글 무료 번역 엔드포인트: Gemini 호출이 실패했을 때(네트워크 오류, 할당량 초과 등)의 예비 수단.
-            async function fallbackTranslate(text, sourceLang, targetLang) {
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLang)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                return (data[0] || []).map(chunk => chunk[0]).join('') || text;
+            // 예비 번역은 위쪽 i18n 스크립트의 fallbackTranslateMany(줄바꿈으로 묶어 한 번에 보내는
+            // 구글 무료 엔드포인트)를 그대로 쓴다. 게시글 본문은 줄바꿈이 있는 경우가 많아 거기서
+            // 자동으로 한 건씩 나뉘고, 짧은 댓글/메시지들은 한 요청으로 묶인다.
+            async function fallbackTranslateAll(texts, sourceLang, targetLang) {
+                if (typeof fallbackTranslateMany !== 'function') return texts.map(() => null);
+                return await fallbackTranslateMany(texts, targetLang, sourceLang);
             }
 
             // 문장 묶음 하나를 처리해서 { 원문: 번역문 }으로 돌려준다.
@@ -7296,10 +7367,11 @@
                     }
                 } catch (err) {
                     console.error('Gemini 번역 실패, 예비 번역으로 대체:', err);
-                    await Promise.all(need.map(async t => {
-                        try { out[t] = await fallbackTranslate(t, sourceLang, targetLang); }
-                        catch (err2) { out[t] = t; }
-                    }));
+                    const results = await fallbackTranslateAll(need, sourceLang, targetLang);
+                    need.forEach((t, i) => {
+                        const v = results[i];
+                        out[t] = (typeof v === 'string' && v.trim()) ? v : t;
+                    });
                 }
                 return out;
             }
