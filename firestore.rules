@@ -12,8 +12,14 @@ service cloud.firestore {
     // 문자열 필드가 "있다면" 문자열이고 길이 상한 안인지 확인한다(없으면 통과).
     // Firestore 문서 하나는 1MB까지 들어가므로, 상한이 없으면 로그인한 사람 누구나
     // API를 직접 호출해 거대한 문서를 계속 만들어 읽기/저장 비용을 부풀릴 수 있다.
+    // null도 통과시킨다 — 클라이언트는 "값이 없음"을 null로 저장하는 자리가 여럿 있다
+    // (최상위 댓글의 parentCommentId, 게시글 신고의 postId, 표시 이름이 없는 구글 계정의 name).
+    // 이걸 빠뜨렸더니 최상위 댓글 작성이 통째로 거부됐다 — 길이 제한의 목적은 "거대한 문자열"을
+    // 막는 것이지 빈 값을 막는 게 아니다.
     function strOk(data, field, maxLen) {
-      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+      return !(field in data)
+        || data[field] == null
+        || (data[field] is string && data[field].size() <= maxLen);
     }
     // 두 uid로 만들어지는 1:1 대화방 문서 id (클라이언트의 chatIdFor: 정렬 후 "_"로 연결).
     // Firebase uid는 영숫자라 JS의 sort()와 규칙의 문자열 비교 결과가 항상 같다.
@@ -119,13 +125,14 @@ service cloud.firestore {
       allow update: if authed() && (
         isValidPostCounterUpdate()
         ||
+        // 길이 검사는 "값이 있으면" 확인한다 — 태그나 본문이 없는 옛 게시글을 수정할 때
+        // 그 자체가 거부되지 않도록(댓글 parentCommentId에서 겪은 것과 같은 함정).
         (request.auth.uid == resource.data.authorUid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'body', 'tags', 'categoryKey'])
           && strOk(request.resource.data, 'title', 300)
-          && request.resource.data.body is string
-          && request.resource.data.body.size() <= 10000
-          && request.resource.data.tags is list
-          && request.resource.data.tags.size() <= 10)
+          && strOk(request.resource.data, 'body', 10000)
+          && (!('tags' in request.resource.data)
+              || (request.resource.data.tags is list && request.resource.data.tags.size() <= 10)))
       );
 
       // 삭제: 작성자 본인만 가능.
