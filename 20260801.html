@@ -3135,6 +3135,8 @@
                 const saved = JSON.parse(raw);
                 Object.keys(saved).forEach(src => {
                     // 이미 이번 세션에서 받은 값(더 좋은 Gemini 번역일 수 있다)은 덮지 않는다.
+                    // 예전 버전이 저장해둔 값이나 다른 스크립트가 심어둔 값일 수 있으므로 여기서도 검사한다.
+                    if (!isSafeTranslation(saved[src])) return;
                     if (translationCache[lang][src] === undefined) translationCache[lang][src] = saved[src];
                 });
             } catch (err) { /* 손상/차단(시크릿 모드 등)은 무시하고 빈 캐시로 시작 */ }
@@ -3171,6 +3173,50 @@
             }, 1500);
         }
 
+        /* ---- 번역문 위생 검사 ----
+           번역문은 화면 곳곳에서 innerHTML로 들어간다(카드 자기소개·태그·버튼 문구 등).
+           그런데 번역문의 출처는 전부 우리가 통제하지 못하는 곳이다:
+             ① Firestore 공유 캐시 — 로그인한 사람이면 누구나 "먼저" 값을 써넣을 수 있다,
+             ② 구글 비공식 번역 엔드포인트, ③ Gemini 응답(번역 대상 안의 마크업을 따라 쓸 수 있다).
+           그래서 꺾쇠가 들어있는 번역문은 캐시에 넣지 않고 원문을 그대로 쓴다 — 한 사람이
+           심어둔 태그가 그 문구를 보는 모든 유저 브라우저에서 실행되는 저장형 XSS를 막는다.
+           (Firestore 규칙에서도 같은 값을 거부한다 — 서버/클라이언트 이중 방어) */
+        function isSafeTranslation(value) {
+            return typeof value === 'string' && value.indexOf('<') === -1 && value.indexOf('>') === -1;
+        }
+
+        /* ---- 공유 캐시에 올려도 되는 문장 ----
+           Firestore translationCache는 규칙상 "누구나" 읽고 목록 조회까지 할 수 있다(로그인 안 한
+           방문자도 마케팅 홈을 번역해 봐야 하므로). 그 말은 여기 올라간 문장은 사실상 공개라는 뜻이다.
+           그래서 화면에 박혀 있는 UI 문구(정적 사전 + MISC_STRINGS + 목업 데이터 + 카테고리 이름)만
+           올린다. 개인 메시지·프로필 자기소개·게시글처럼 유저가 쓴 문장은 이 기기의 localStorage
+           캐시에만 남는다 — 예전에는 1:1 대화 내용까지 이 공개 캐시에 원문/번역문 그대로 올라갔다. */
+        let shareableTextSet = null;
+        function shareableTexts() {
+            if (shareableTextSet) return shareableTextSet;
+            const set = new Set();
+            try {
+                Object.keys(translations.ko).forEach(key => set.add(stripHtml(translations.ko[key])));
+                MISC_STRINGS.forEach(str => set.add(str));
+                students.forEach(st => {
+                    set.add(st.bio); set.add(st.major);
+                    (st.tags || []).forEach(tag => set.add(tag));
+                    if (st.project) { set.add(st.project.role); set.add(st.project.description); }
+                });
+                COMMUNITY_CATEGORIES.forEach(cat => {
+                    Object.keys(cat.names).forEach(code => set.add(cat.names[code]));
+                });
+            } catch (err) { /* 아직 초기화 전이면 다음 호출에서 다시 만든다 */ return set; }
+            shareableTextSet = set;
+            return set;
+        }
+        function isShareableText(text) { return shareableTexts().has(text); }
+        function onlyShareable(map) {
+            const out = {};
+            Object.keys(map || {}).forEach(key => { if (isShareableText(key)) out[key] = map[key]; });
+            return out;
+        }
+
         // 번역 결과를 메모리 + 로컬 캐시에 함께 기록한다. 실제로 바뀐 것만 돌려준다.
         function rememberTranslations(lang, map) {
             if (!lang || lang === 'ko' || !map) return {};
@@ -3180,6 +3226,7 @@
             Object.keys(map).forEach(src => {
                 const value = map[src];
                 if (typeof value !== 'string' || !value.trim()) return;
+                if (!isSafeTranslation(value)) return; // 태그가 섞인 번역문은 버리고 원문을 쓴다
                 if (cache[src] === value) return;
                 cache[src] = value;
                 changed[src] = value;
@@ -3434,9 +3481,10 @@
             const work = (async () => {
                 if (!missing.length) return;
                 // 다른 유저(또는 이전 세션)가 이미 번역해둔 문장은 Gemini를 아예 부르지 않는다.
-                if (window.__fbGetCachedTranslations) {
+                const sharedLookup = missing.filter(isShareableText);
+                if (sharedLookup.length && window.__fbGetCachedTranslations) {
                     try {
-                        const shared = await window.__fbGetCachedTranslations(targetLang, missing);
+                        const shared = await window.__fbGetCachedTranslations(targetLang, sharedLookup);
                         rememberTranslations(targetLang, shared);
                     } catch (err) { /* 공유 캐시 조회 실패는 무시 */ }
                 }
@@ -3464,8 +3512,10 @@
                         // 공유 캐시(Firestore)에는 Gemini 결과만 기여한다. 보안 규칙상 create만 되고
                         // 덮어쓰기가 안 되므로, 예비 번역을 먼저 넣어버리면 그 품질이 이후 모든
                         // 유저에게 영구히 박혀서 Gemini를 켜둔 의미가 사라진다.
-                        if (fromAI && window.__fbSetCachedTranslations && Object.keys(fresh).length) {
-                            window.__fbSetCachedTranslations(targetLang, fresh);
+                        // 공개 캐시에는 UI 문구만 올린다(isShareableText 주석 참고).
+                        const shareable = onlyShareable(fresh);
+                        if (fromAI && window.__fbSetCachedTranslations && Object.keys(shareable).length) {
+                            window.__fbSetCachedTranslations(targetLang, shareable);
                         }
                     };
                     const { results, fromAI } = await translateChunk(chunk, targetLang, late => apply(late, true));
@@ -4326,11 +4376,26 @@
                 pinned: !!record.pinned, otherLastReadAt: 0, isMock: true, studentId: record.studentId,
             };
         }
+        // 대화 상대의 표시 이름은 실제 프로필(users/{uid} → __REAL_STUDENTS)을 우선한다.
+        // chats 문서의 participantInfo.name은 "대화를 건 쪽이 써넣은 값"이라 서버가 검증하지 않는다 —
+        // 즉 아무나 "Unily 운영팀" 같은 이름으로 대화를 걸면 상대 메시지함에 그 이름이 그대로 떴다
+        // (실명 기반 서비스에서 사칭·피싱 경로). 알림(notifications)은 이미 규칙에서 실제 프로필과
+        // 대조하도록 고쳤고, 대화 목록은 서버에서 강제하기 어려워 화면에서 실제 프로필로 덮어쓴다.
+        function verifiedUserName(uid, fallback) {
+            if (!uid) return fallback || 'Unknown';
+            const u = (window.__REAL_STUDENTS || []).find(x => x.uid === uid);
+            return (u && u.name) || fallback || 'Unknown';
+        }
         // 실제 Firestore 대화(window.__CHATS) + AI 학생과의 대화(window.__REAL_MOCK_CHATS, 역시 Firestore)를
         // 최신순으로 합친 통합 목록. 메시지함 화면의 모든 렌더링/선택 함수가 이 함수 하나만 거친다.
+        // 여기서 otherName을 한 번 검증된 이름으로 덮어두면, 목록·헤더·요청 카드 등 이 함수를 거치는
+        // 모든 화면이 자동으로 같은 보호를 받는다.
         function getAllChatsCombined() {
             const mockList = (window.__REAL_MOCK_CHATS || []).map(mockChatToListItem);
-            return [...mockList, ...(window.__CHATS || [])].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            const realList = (window.__CHATS || []).map(c => (
+                c.otherUid ? Object.assign({}, c, { otherName: verifiedUserName(c.otherUid, c.otherName) }) : c
+            ));
+            return [...mockList, ...realList].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         }
         function renderMsgNavBadge() {
             const badge = document.getElementById('msgNavBadge');
@@ -5124,6 +5189,7 @@
             }
 
             listEl.innerHTML = chats.map(c => {
+                const displayName = c.otherName || 'Unknown';
                 const unread = c.unreadCount > 0;
                 const mineLast = c.lastMessageSenderUid && c.lastMessageSenderUid === myUid;
                 const readIcon = mineLast
@@ -5138,12 +5204,12 @@
           <div class="msg-item ${c.id === currentChatId ? 'active' : ''}" onclick="selectChat('${c.id}')">
             <button type="button" class="msg-pin-toggle${c.pinned ? ' pinned' : ''}" onclick="event.stopPropagation(); togglePinChat('${c.id}', ${c.pinned})" aria-label="${c.pinned ? '고정 해제' : '대화 고정'}">📌</button>
             <div class="msg-avatar-wrap">
-              <div class="msg-avatar">${initialsOf(c.otherName)}</div>
+              <div class="msg-avatar">${escapeHTML(initialsOf(displayName))}</div>
               ${unread ? `<div class="msg-badge">${c.unreadCount > 9 ? '9+' : c.unreadCount}</div>` : ''}
             </div>
             <div class="msg-info">
               <div class="msg-name-row">
-                <span class="msg-name">${escapeHTML(c.otherName || 'Unknown')}</span>
+                <span class="msg-name">${escapeHTML(displayName)}</span>
                 <span class="msg-time">${c.updatedAt ? relativeTimeLabel(c.updatedAt) : ''}</span>
               </div>
               <div class="msg-preview${unread ? ' unread' : ''}">${readIcon}<span id="msg-preview-text-${c.id}">${escapeHTML(previewText)}</span></div>
@@ -5664,7 +5730,7 @@
             const sharedHTML = `<div class="shared-dream-badge">${sharedIcon} ${escapeHTML(sharedText)}</div>`;
             return `
               <div class="chat-profile-banner">
-                <div class="chat-profile-banner-avatar" style="background:${card.badgeGradient || ''}">${initialsOf(card.name)}</div>
+                <div class="chat-profile-banner-avatar" style="background:${escapeHTML(card.badgeGradient || '')}">${escapeHTML(initialsOf(card.name))}</div>
                 <div class="chat-profile-banner-name">${escapeHTML(card.name)}</div>
                 ${countryHTML}
                 ${uniLine ? `<div class="chat-profile-banner-uni">${escapeHTML(uniLine)}</div>` : ''}
@@ -5737,7 +5803,7 @@
 
                 const avatarName = isChannel ? channelMemberName(m.senderUid) : (chatInfo ? chatInfo.otherName : '');
                 const avatarHtml = !isOut
-                    ? `<div class="chat-group-avatar${!grouped ? ' show' : ''}">${initialsOf(avatarName)}</div>`
+                    ? `<div class="chat-group-avatar${!grouped ? ' show' : ''}">${escapeHTML(initialsOf(avatarName))}</div>`
                     : '';
 
                 const replyHtml = m.replyTo
@@ -5745,16 +5811,20 @@
                     : '';
 
                 const reactions = m.reactions || {};
-                const reactionKeys = Object.keys(reactions).filter(e => (reactions[e] || []).length > 0);
+                // reactions는 대화 상대가 보내는 값을 그대로 저장하는 유일한 "키가 자유로운" 필드다.
+                // 규칙이 키 이름까지는 못 정하므로, 화면에 그릴 때 우리가 아는 이모지만 통과시킨다
+                // (예전엔 임의의 키가 그대로 onclick 문자열과 본문에 들어가 코드 실행으로 이어졌다).
+                const reactionKeys = Object.keys(reactions)
+                    .filter(e => REACTION_EMOJIS.includes(e) && (reactions[e] || []).length > 0);
                 const reactionsHtml = reactionKeys.length
                     ? `<div class="chat-reactions">${reactionKeys.map(e => {
                         const mine = (reactions[e] || []).includes(myUid);
-                        return `<button type="button" class="chat-reaction-chip${mine ? ' mine' : ''}" onclick="toggleReaction('${m.id}','${e}')">${e} ${reactions[e].length}</button>`;
+                        return `<button type="button" class="chat-reaction-chip${mine ? ' mine' : ''}" onclick="toggleReaction('${m.id}','${jsAttrString(e)}')">${escapeHTML(e)} ${reactions[e].length}</button>`;
                     }).join('')}</div>`
                     : '';
 
                 const pickerHtml = openReactionPickerId === m.id
-                    ? `<div class="chat-reaction-picker">${REACTION_EMOJIS.map(e => `<button type="button" onclick="toggleReaction('${m.id}','${e}')">${e}</button>`).join('')}</div>`
+                    ? `<div class="chat-reaction-picker">${REACTION_EMOJIS.map(e => `<button type="button" onclick="toggleReaction('${m.id}','${jsAttrString(e)}')">${escapeHTML(e)}</button>`).join('')}</div>`
                     : '';
 
                 const readReceiptHtml = (isOut && m.id === myLastMessageId)
@@ -6336,6 +6406,13 @@
                 dreamExchangeCountries: existing.dreamExchangeCountries || [],
                 dreamExchangeChoice: existing.dreamExchangeChoice || ((existing.dreamExchangeCountries || []).length > 0 ? 'has' : null),
             };
+            // 학교 이메일은 이제 공개 프로필 문서가 아니라 본인 전용 문서에 있다(보안: 전체 회원
+            // 이메일 수집 방지). 갭필 저장이 기존 값을 지우지 않도록 미리 읽어둔다.
+            if (!onboardingData.studentEmail && window.__fbGetMyContact) {
+                window.__fbGetMyContact().then(contact => {
+                    if (contact && contact.studentEmail) onboardingData.studentEmail = contact.studentEmail;
+                }).catch(() => {});
+            }
             document.getElementById('onboardingOverlay').classList.add('active');
             onboardingRenderStep();
         }
@@ -7395,6 +7472,21 @@
             return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
         }
 
+        // 자유 텍스트(태그, 이모지 키처럼 유저가 값을 정하는 문자열)를 onclick="..." 안의 JS 문자열
+        // 리터럴로 안전하게 끼워넣는다. escapeHTML만으로는 부족하다 — 브라우저는 속성값의 HTML
+        // 엔티티를 먼저 원래 문자로 되돌린 "뒤에" 그 내용을 JS로 컴파일하므로, &#39;가 다시 '로
+        // 풀리면서 문자열이 끊기고 그 뒤는 코드로 실행된다(예: 태그 이름이 `');alert(1);//`).
+        // 그래서 JS 이스케이프를 먼저 하고, 그 결과를 HTML 이스케이프한다 — 이 순서가 핵심이다.
+        // (onclick에 아예 자유 텍스트를 넣지 않는 게 최선이고 카드 버튼들은 그렇게 고쳤지만,
+        //  태그/리액션처럼 값 자체가 식별자인 자리는 이 함수로 감싼다.)
+        function jsAttrString(value) {
+            const js = String(value === null || value === undefined ? '' : value)
+                .replace(/[\\'\"]/g, ch => '\\' + ch)
+                .replace(/[\r\n\u2028\u2029]/g, ' ')
+                ;
+            return escapeHTML(js);
+        }
+
         /* ---------- MOCK DATA: POSTS ---------- */
         // authorId는 기존 students 배열의 학생 id를 그대로 참조해서, 프로필 클릭 시
         // 기존 openStudentProfile() 모달이 바로 열리도록 연결한다. lang은 "실제로 그 글이
@@ -7540,7 +7632,9 @@
                     if (local !== undefined) out[t] = local;
                 });
                 // 2) 다른 유저/이전 세션이 이미 번역해둔 문장(Firestore 공유 캐시)
-                const needShared = texts.filter(t => out[t] === undefined);
+                // 여기로 오는 문장은 대부분 유저가 쓴 글(게시글·댓글·1:1 메시지)이다.
+                // 공개 캐시는 UI 문구만 다루므로 해당되는 것만 조회한다.
+                const needShared = texts.filter(t => out[t] === undefined && isShareableText(t));
                 if (needShared.length && window.__fbGetCachedTranslations) {
                     try {
                         const shared = await window.__fbGetCachedTranslations(targetLang, needShared);
@@ -7560,10 +7654,12 @@
                         if (typeof v === 'string' && v.trim()) { out[t] = v; fresh[t] = v; }
                         else { out[t] = t; }
                     });
-                    // 공유 캐시(Firestore)에는 Gemini 결과만, 로컬 캐시에는 무엇이든 기록한다.
+                    // 공유 캐시(Firestore)에는 Gemini 결과 중 "UI 문구"만, 로컬 캐시에는 무엇이든 기록한다.
+                    // 개인 메시지/게시글 본문은 절대 공개 캐시로 나가지 않는다(onlyShareable).
                     rememberTranslations(targetLang, fresh);
-                    if (window.__fbSetCachedTranslations && Object.keys(fresh).length) {
-                        window.__fbSetCachedTranslations(targetLang, fresh);
+                    const shareableFresh = onlyShareable(fresh);
+                    if (window.__fbSetCachedTranslations && Object.keys(shareableFresh).length) {
+                        window.__fbSetCachedTranslations(targetLang, shareableFresh);
                     }
                 } catch (err) {
                     // 분당 예산을 아껴 쓰느라 의도적으로 건너뛴 경우는 "실패"가 아니므로 조용히 넘어간다.
@@ -7596,7 +7692,7 @@
                     catch (err) { console.error('번역 묶음 처리 실패:', err); }
                     group.forEach(it => {
                         const v = out[it.text];
-                        const value = (typeof v === 'string' && v.trim()) ? v : it.text;
+                        const value = (typeof v === 'string' && v.trim() && isSafeTranslation(v)) ? v : it.text;
                         cache[key][it.text] = value;
                         it.resolve(value);
                     });
@@ -8087,7 +8183,7 @@
                   <span>${shownOriginal ? '' : translatedFromLabel(post.lang)}</span>
                   <button class="post-view-original-btn" onclick="event.stopPropagation(); toggleShowOriginalPost('${post.id}')">${shownOriginal ? viewTranslationText() : viewOriginalText()}</button>
                 </div>` : ''}
-                <div class="post-tags">${(post.tags || []).map(tg => `<button class="post-tag" onclick="event.stopPropagation(); filterByTag('${tg}')">#${escapeHTML(tg)}</button>`).join('')}</div>
+                <div class="post-tags">${(post.tags || []).map(tg => `<button class="post-tag" onclick="event.stopPropagation(); filterByTag('${jsAttrString(tg)}')">#${escapeHTML(tg)}</button>`).join('')}</div>
 
                 <div class="post-actions-row">
                   <button class="post-action-btn like-btn${liked ? ' liked' : ''}" onclick="event.stopPropagation(); toggleLikePost('${post.id}')">${liked ? '❤️' : '🤍'} <span>${post.likes}</span></button>
@@ -8265,7 +8361,7 @@
             if (!list) return;
             CommunityService.getTrendingTopics().then(trending => {
                 list.innerHTML = trending.map(item => `
-                  <button class="trending-item" onclick="filterByTag('${item.tag}')">
+                  <button class="trending-item" onclick="filterByTag('${jsAttrString(item.tag)}')">
                     <span class="trending-tag">#${escapeHTML(item.tag)}</span>
                     <span class="trending-count">${item.count}</span>
                   </button>
@@ -8447,7 +8543,7 @@
                 }
 
                 document.getElementById('detailTags').innerHTML = (post.tags || []).map(tg =>
-                    `<button class="post-tag" onclick="filterByTag('${tg}'); showPage('community');">#${escapeHTML(tg)}</button>`
+                    `<button class="post-tag" onclick="filterByTag('${jsAttrString(tg)}'); showPage('community');">#${escapeHTML(tg)}</button>`
                 ).join('');
 
                 const liked = isPostLiked(post.id);
@@ -8929,6 +9025,7 @@
       import {
         initializeAppCheck,
         ReCaptchaEnterpriseProvider,
+        ReCaptchaV3Provider,
       } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app-check.js";
       import {
         getAuth,
@@ -8949,6 +9046,7 @@
         addDoc,
         updateDoc,
         deleteDoc,
+        deleteField,
         collection,
         collectionGroup,
         query,
@@ -9004,10 +9102,25 @@
          나중에 다시 검토하고 싶으면: 결제 계정 연결 없이 쓸 수 있는 방법(예: 무료 티어 안에서
          빌링만 별도로 막아두는 예산 알림 설정 등)을 먼저 확인한 뒤 진행할 것.
          ================================================================== */
-      const APP_CHECK_SITE_KEY = "";
-      if (APP_CHECK_SITE_KEY) {
+      // [2026-09 보안 점검] App Check가 꺼져 있으면, 이 페이지의 firebaseConfig만 복사해서
+      // 스크립트로 Firestore/Gemini(Firebase AI Logic)를 그대로 호출할 수 있다 — 보안 규칙이
+      // "누가 무엇을 할 수 있는지"는 지켜주지만 "사람이 브라우저에서 우리 앱을 쓰고 있는지"는
+      // App Check만 확인해준다. 무료 티어 번역 할당량을 남이 태워버리거나, 규칙이 허용하는
+      // 범위 안에서 유저 목록/게시글을 대량으로 긁어가는 건 App Check 없이는 막을 수 없다.
+      // 결제 계정이 필요한 reCAPTCHA Enterprise 대신, 결제 없이 쓸 수 있는 reCAPTCHA v3
+      // 공급자도 함께 지원한다 — 아래 상수에 v3 사이트 키만 넣으면 바로 켜진다.
+      // (Firebase 콘솔 → App Check → 앱 등록 → reCAPTCHA v3. 켠 뒤에는 콘솔에서 "적용(enforce)"
+      //  전에 며칠 모니터링 모드로 두고 정상 트래픽이 통과하는지 확인할 것.)
+      const APP_CHECK_V3_SITE_KEY = "";          // reCAPTCHA v3 (결제 계정 불필요)
+      const APP_CHECK_ENTERPRISE_SITE_KEY = "";  // reCAPTCHA Enterprise (결제 계정 필요할 수 있음)
+      if (APP_CHECK_V3_SITE_KEY) {
         initializeAppCheck(app, {
-          provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+          provider: new ReCaptchaV3Provider(APP_CHECK_V3_SITE_KEY),
+          isTokenAutoRefreshEnabled: true,
+        });
+      } else if (APP_CHECK_ENTERPRISE_SITE_KEY) {
+        initializeAppCheck(app, {
+          provider: new ReCaptchaEnterpriseProvider(APP_CHECK_ENTERPRISE_SITE_KEY),
           isTokenAutoRefreshEnabled: true,
         });
       }
@@ -9288,6 +9401,39 @@
       // Google ID 토큰으로 Firebase Auth 로그인 + Firestore users 컬렉션에 유저 문서 자동 생성.
       // 반환하는 needsOnboarding으로 "초기 프로필 설정 위저드"를 띄울지 판단한다(신규 유저이거나,
       // 예전에 위저드를 끝내지 않고 중간에 닫은 유저 둘 다 해당).
+      // 본인만 읽을 수 있는 연락처 문서(규칙: users/{uid}/private/{doc}).
+      function privateContactRef(uid) {
+        return doc(db, "users", uid, "private", "contact");
+      }
+      // 이 변경 이전에 가입한 유저의 users/{uid} 문서에는 email/studentEmail이 공개로 남아 있다.
+      // 로그인할 때마다 조용히 비공개 문서로 옮기고 공개 문서에서는 지운다 — 배포만으로 기존
+      // 노출분까지 시간이 지나며 정리되도록 하기 위한 장치다(한 번 옮기면 다시 할 일이 없다).
+      async function migrateContactToPrivate(uid, data) {
+        if (!data) return;
+        const moved = {};
+        if (typeof data.email === "string" && data.email) moved.email = data.email;
+        if (typeof data.studentEmail === "string" && data.studentEmail) moved.studentEmail = data.studentEmail;
+        if (Object.keys(moved).length === 0) return;
+        try {
+          await setDoc(privateContactRef(uid), moved, { merge: true });
+          const cleared = {};
+          Object.keys(moved).forEach((key) => { cleared[key] = deleteField(); });
+          await updateDoc(doc(db, "users", uid), cleared);
+        } catch (err) {
+          console.error("연락처 비공개 이전 실패:", err);
+        }
+      }
+      // 온보딩 위저드가 다시 열렸을 때 이미 입력해둔 학교 이메일을 보여주기 위한 조회(본인 전용).
+      window.__fbGetMyContact = async function () {
+        if (!auth.currentUser) return {};
+        try {
+          const snap = await getDoc(privateContactRef(auth.currentUser.uid));
+          return snap.exists() ? snap.data() : {};
+        } catch (err) {
+          return {};
+        }
+      };
+
       window.syncUserToFirebase = async function (idToken) {
         const credential = GoogleAuthProvider.credential(idToken);
         const result = await signInWithCredential(auth, credential);
@@ -9297,16 +9443,23 @@
         const snap = await getDoc(userRef);
         let data;
         if (!snap.exists()) {
+          // users/{uid}는 로그인한 사람이면 누구나 읽을 수 있는 문서다(탐색 탭 카드가 이 문서를
+          // 그대로 읽어 그린다). Firestore에는 필드 단위 읽기 규칙이 없으므로, 남에게 보일 필요가
+          // 없는 연락처(구글 계정 이메일)는 여기 두지 않고 본인만 읽을 수 있는 하위 문서에 담는다.
+          // 예전에는 email이 이 문서에 그대로 들어가서, 계정 하나만 만들면 전체 회원의 이메일을
+          // 긁어갈 수 있었다.
           data = {
             name: result.user.displayName,
-            email: result.user.email,
             picture: result.user.photoURL,
             createdAt: serverTimestamp(),
             onboardingComplete: false,
           };
           await setDoc(userRef, data);
+          await setDoc(privateContactRef(uid), { email: result.user.email || "" }, { merge: true })
+            .catch((err) => console.error("연락처 저장 실패:", err));
         } else {
           data = snap.data();
+          await migrateContactToPrivate(uid, data);
         }
         return { uid, needsOnboarding: data.onboardingComplete !== true };
       };
@@ -9315,9 +9468,15 @@
       // onboardingCompletedAt은 탐색 탭에 새로 온보딩을 끝낸 학생이 맨 앞에 뜨도록 정렬하는 기준이 된다.
       window.__fbSaveOnboarding = async function (data) {
         if (!auth.currentUser) throw new Error("Firebase 로그인이 필요합니다.");
+        // 학교 이메일은 공개 문서(users/{uid})가 아니라 본인만 읽는 하위 문서에 저장한다.
+        // 빈 값이면 기존 값을 지우지 않는다 — 갭필(gap-fill) 모드처럼 이메일 단계를 건너뛴
+        // 저장에서 이미 넣어둔 학교 이메일이 날아가지 않게 하기 위함.
+        if (typeof data.studentEmail === "string" && data.studentEmail.trim()) {
+          await setDoc(privateContactRef(auth.currentUser.uid), { studentEmail: data.studentEmail.trim() }, { merge: true })
+            .catch((err) => console.error("학교 이메일 저장 실패:", err));
+        }
         await updateDoc(doc(db, "users", auth.currentUser.uid), {
           name: data.name,
-          studentEmail: data.studentEmail,
           university: data.university,
           universityId: data.universityId || null,
           major: data.major,
@@ -9339,8 +9498,20 @@
       //  로컬 프로필 저장 자체는 이미 끝난 뒤라 사용자 경험에는 영향이 없다.)
       window.__fbUpdateProfileFields = async function (fields) {
         if (!auth.currentUser) return;
+        // 연락처(이메일)는 실수로라도 공개 문서에 다시 들어가지 않도록 여기서 갈라낸다.
+        const publicFields = {};
+        const privateFields = {};
+        Object.keys(fields || {}).forEach((key) => {
+          if (key === "email" || key === "studentEmail") privateFields[key] = fields[key];
+          else publicFields[key] = fields[key];
+        });
         try {
-          await updateDoc(doc(db, "users", auth.currentUser.uid), fields);
+          if (Object.keys(privateFields).length) {
+            await setDoc(privateContactRef(auth.currentUser.uid), privateFields, { merge: true });
+          }
+          if (Object.keys(publicFields).length) {
+            await updateDoc(doc(db, "users", auth.currentUser.uid), publicFields);
+          }
         } catch (err) {
           console.error("프로필 Firestore 동기화 실패:", err);
         }
@@ -9390,6 +9561,11 @@
         await deleteMyPostsAndComments(uid).catch((err) => {
           console.error("탈퇴 중 게시글/댓글 정리 실패:", err);
         });
+        // 비공개 연락처 문서는 users/{uid} 문서를 지워도 같이 지워지지 않는다(Firestore의 하위
+        // 컬렉션은 상위 문서와 독립). 개인정보처리방침의 "탈퇴 시 삭제" 약속을 지키려면 명시적으로 지워야 한다.
+        await deleteDoc(privateContactRef(uid)).catch((err) => {
+          console.error("탈퇴 중 연락처 문서 삭제 실패:", err);
+        });
         await deleteDoc(doc(db, "users", uid)).catch((err) => {
           console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
         });
@@ -9405,6 +9581,11 @@
         const uid = auth.currentUser.uid;
         await deleteMyPostsAndComments(uid).catch((err) => {
           console.error("탈퇴 중 게시글/댓글 정리 실패:", err);
+        });
+        // 비공개 연락처 문서는 users/{uid} 문서를 지워도 같이 지워지지 않는다(Firestore의 하위
+        // 컬렉션은 상위 문서와 독립). 개인정보처리방침의 "탈퇴 시 삭제" 약속을 지키려면 명시적으로 지워야 한다.
+        await deleteDoc(privateContactRef(uid)).catch((err) => {
+          console.error("탈퇴 중 연락처 문서 삭제 실패:", err);
         });
         await deleteDoc(doc(db, "users", uid)).catch((err) => {
           console.error("탈퇴 중 프로필 문서 삭제 실패:", err);
