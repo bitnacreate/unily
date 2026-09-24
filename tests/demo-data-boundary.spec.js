@@ -5,6 +5,7 @@ const { test, expect, gotoApp, loginAs } = require('./fixtures');
 test.describe('예시 데이터 경계', () => {
   test('탐색 헤드라인 숫자는 실제 학생만 센다', async ({ page }) => {
     await gotoApp(page);
+    await loginAs(page, { uid: 'me' });   // 실제 학생 목록은 로그인해야 읽힌다
 
     // 실제 유저 2명을 주입한다. 예시 학생 16명은 그대로 있다.
     await page.evaluate(() => {
@@ -23,12 +24,21 @@ test.describe('예시 데이터 경계', () => {
 
   test('실제 학생이 없으면 숫자를 부풀리지 않고 0과 안내를 보여준다', async ({ page }) => {
     await gotoApp(page);
+    await loginAs(page, { uid: 'me' });
     await page.evaluate(() => { window.__REAL_STUDENTS = []; render(); });
 
     expect(await page.locator('#result-count strong').textContent()).toBe('0');
     await expect(page.locator('#card-grid .explore-empty')).toContainText('첫 번째 학생이 되어보세요');
     // 예시 카드는 구분선 뒤에 그대로 남아 화면이 비어 보이지는 않게 한다.
     await expect(page.locator('#card-grid .demo-divider')).toHaveCount(1);
+  });
+
+  test('비로그인 방문자에게는 "0명" 대신 안내를 보여준다 (목록을 읽을 권한이 없을 뿐이므로)', async ({ page }) => {
+    await gotoApp(page);   // 로그인하지 않은 상태
+
+    await expect(page.locator('#result-count')).not.toContainText('0명');
+    await expect(page.locator('#result-count')).toContainText('학교 이메일로 가입하면');
+    await expect(page.locator('#card-grid .explore-empty')).toContainText('로그인하면');
   });
 
   test('커뮤니티 피드에서 예시 글은 실제 글 아래에 구분선과 함께 온다', async ({ page }) => {

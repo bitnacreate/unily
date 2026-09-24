@@ -4418,6 +4418,27 @@
                 de: 'Noch keine passenden Studierenden. Sei die oder der Erste.',
                 ja: 'まだ条件に合う学生がいません。最初の一人になってみませんか。',
                 'zh-CN': '还没有符合条件的学生。成为第一个吧。'
+            },
+            // 실제 학생 목록은 로그인해야 읽을 수 있다(보안 규칙). 로그인 전에 "0명"이라고 쓰면
+            // 규모를 부풀리는 것과 반대 방향으로, 역시 사실이 아닌 숫자를 보여주는 게 된다.
+            // 숫자를 감추고 무엇을 하면 보이는지만 말한다.
+            locked_count: {
+                ko: '학교 이메일로 가입하면 지금 UNILY에 있는 학생들을 볼 수 있어요',
+                en: 'Sign up with your school email to see the students on UNILY',
+                fr: 'Inscrivez-vous avec votre e-mail universitaire pour voir les étudiants sur UNILY',
+                es: 'Regístrate con tu correo universitario para ver a los estudiantes de UNILY',
+                de: 'Melde dich mit deiner Uni-E-Mail an, um die Studierenden auf UNILY zu sehen',
+                ja: '大学のメールで登録すると、UNILYにいる学生を見られます',
+                'zh-CN': '使用学校邮箱注册即可查看 UNILY 上的学生'
+            },
+            locked_empty: {
+                ko: '로그인하면 실제 학생 프로필이 여기에 표시돼요. 아래는 서비스 이해를 돕기 위한 예시예요.',
+                en: 'Real student profiles appear here once you sign in. The examples below show how it works.',
+                fr: 'Les profils réels apparaissent ici après connexion. Les exemples ci-dessous montrent le fonctionnement.',
+                es: 'Los perfiles reales aparecen aquí al iniciar sesión. Los ejemplos de abajo muestran cómo funciona.',
+                de: 'Echte Profile erscheinen hier nach dem Anmelden. Die Beispiele unten zeigen, wie es funktioniert.',
+                ja: 'ログインすると実際の学生プロフィールがここに表示されます。下はその例です。',
+                'zh-CN': '登录后这里会显示真实的学生档案。下面是示例。'
             }
         };
         function demoText(key) {
@@ -4453,11 +4474,16 @@
 
             // 헤드라인 숫자는 실제 학생만 센다. 예시 프로필까지 합쳐서 "총 16명"이라고 말하면
             // 그건 없는 규모를 지어내는 것이다.
-            resultCount.innerHTML = demoText('real_count').replace('{n}', `<strong>${realCards.length}</strong>`);
+            // 단, 실제 목록은 로그인해야 읽히므로(보안 규칙) 로그인 전에는 숫자 대신 안내를 쓴다 —
+            // "0명"도 사실이 아니기 때문이다.
+            const directoryVisible = !!(window.__myUid && window.__myUid());
+            resultCount.innerHTML = directoryVisible
+                ? demoText('real_count').replace('{n}', `<strong>${realCards.length}</strong>`)
+                : escapeHTML(demoText('locked_count'));
 
             const realHTML = realCards.length
                 ? realCards.map(s => studentCardHTML(s)).join('')
-                : `<div class="explore-empty">${escapeHTML(demoText('real_empty'))}</div>`;
+                : `<div class="explore-empty">${escapeHTML(demoText(directoryVisible ? 'real_empty' : 'locked_empty'))}</div>`;
             const demoHTML = demoCards.length
                 ? demoDividerHTML('students_title', 'students_desc') + demoCards.map(s => studentCardHTML(s)).join('')
                 : '';
