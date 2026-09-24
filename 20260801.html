@@ -47,6 +47,32 @@
     --radius-lg:28px;
     --radius-md:18px;
 
+    /* ---- 시맨틱 토큰 ----
+       기존 토큰(--indigo, --ink 같은 "색 이름")은 그대로 두되, 그 위에 "역할 이름"을 한 겹 얹는다.
+       역할로 쓰면 나중에 팔레트를 바꾸거나 다크 모드를 넣을 때 이 블록만 고치면 되고,
+       코드를 읽을 때도 "왜 이 색인지"가 드러난다(--indigo가 아니라 --primary라서 쓴 것).
+       새 코드는 역할 토큰을 쓰고, 기존 색 이름은 점진적으로 옮긴다. */
+    --primary:var(--indigo);
+    --primary-hover:var(--indigo-deep);
+    --surface:var(--card);            /* 콘텐츠가 올라가는 면 */
+    --surface-2:var(--bg-alt);        /* 한 단계 낮은 면(칩·트랙·비활성 영역) */
+    --text-1:var(--ink);              /* 제목·본문 */
+    --text-2:var(--ink-soft);         /* 보조 설명·메타 */
+    --border:var(--line);
+    --success:#2E9E7A;
+    --warning:#C98A1B;
+    --error:#E24E76;
+
+    /* ---- 간격 스케일 (4px 배수) ----
+       지금까지 여백은 자리마다 직접 적힌 값이었다. 새로 쓰는 곳은 이 스케일 안에서만 고른다. */
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+    --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+
+    /* ---- 모션 ----
+       지속시간과 이징을 한 곳에서 정의해, 화면마다 속도감이 달라지지 않게 한다. */
+    --dur-fast:.12s; --dur-base:.2s; --dur-slow:.32s;
+    --ease:cubic-bezier(.2,.7,.3,1);
+
     /* 사이트 전체 서체. 예전엔 본문 Inter + 제목 Space Grotesk 두 벌이었는데, 한글이 섞이는
        화면에서 두 서체 모두 한글 글리프가 없어 브라우저 기본 고딕으로 떨어졌다(영문과 한글의
        인상이 따로 놀던 원인). Pretendard 한 벌로 통일한다 — 굵기 값은 기존 그대로 쓴다. */
@@ -1889,6 +1915,22 @@
   .activity-menu-label{ flex:1; min-width:0; font-size:14px; font-weight:600; color:var(--ink); }
   .activity-menu-chevron{ font-size:15px; color:var(--ink-soft); }
 
+  /* ---------- 예시(데모) 콘텐츠 구분선 ----------
+     실제 유저와 예시 데이터가 한 줄기로 이어지면 예시가 실제 활동처럼 읽힌다.
+     카드처럼 보이지 않게(= 또 하나의 콘텐츠로 오해되지 않게) 선과 글자만으로 구분한다. */
+  .demo-divider{
+    grid-column:1 / -1; width:100%;
+    margin:34px 0 18px; padding-top:20px; border-top:1px solid var(--line);
+  }
+  .demo-divider-title{
+    font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:6px;
+  }
+  .demo-divider-desc{ font-size:13px; line-height:1.6; color:var(--ink-soft); max-width:62ch; }
+  .explore-empty{
+    grid-column:1 / -1; padding:34px 4px; color:var(--ink-soft); font-size:14.5px; line-height:1.6;
+  }
+
   /* ---------- 로딩 스켈레톤 ----------
      목록을 기다리는 동안 화면이 그냥 비어 있으면, 느린 네트워크에서는 "멈춘 것"처럼 보인다.
      올 자리를 먼저 잡아두면 오고 있다는 게 보이고, 도착했을 때 레이아웃도 튀지 않는다. */
@@ -2059,6 +2101,21 @@
   /* 모달이 열려 있는 동안 뒤쪽 페이지가 같이 스크롤되지 않게 한다 — 모바일에서 모달 안을
      스크롤하려다 배경이 밀려 내려가던 문제(scroll chaining)를 막는다. */
   body.modal-open{ overflow:hidden; }
+
+  /* ---------- 모션 최소화 설정 존중 (전역) ----------
+     예전에는 팝오버·스켈레톤 두 곳만 이 설정을 봤다. 전정기관 질환이 있는 사용자에게는
+     화면 전환·플로팅 애니메이션이 실제로 어지럼증을 일으키므로, 운영체제에서 "동작 줄이기"를
+     켠 사용자에게는 앱 전체에서 애니메이션과 부드러운 스크롤을 끈다.
+     (완전히 0으로 두면 transitionend를 기다리는 코드가 멈출 수 있어 아주 짧은 값을 남긴다.) */
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:.01ms !important;
+      animation-iteration-count:1 !important;
+      transition-duration:.01ms !important;
+      scroll-behavior:auto !important;
+    }
+    html{ scroll-behavior:auto; }
+  }
 </style>
 </head>
 <body>
@@ -4277,6 +4334,107 @@
             return [...realCards, ...mockCards];
         }
 
+        /* ==================================================================
+           데모 콘텐츠 경계
+           students(16명)와 COMMUNITY_POSTS는 초기에 화면이 비어 보이지 않게 넣어둔 예시 데이터다.
+           문제는 이게 실제 유저와 한 목록에 그대로 섞여 있었다는 점이다 — 방문자 입장에서는
+           "이미 학생이 많은 서비스"로 보이지만 사실이 아니다. 지어낸 활동으로 규모를 부풀리는 건
+           사용자를 속이는 일이고, 나중에 들통났을 때 브랜드가 치르는 값이 훨씬 크다.
+           그래서 경계를 여기 한 곳에서 정의하고 두 가지 규칙을 전 화면에 적용한다:
+             1) 숫자·통계(학생 수, 트렌딩, 인기 학생)에는 데모를 절대 포함하지 않는다.
+             2) 화면에 보일 때는 항상 "예시"로 구분해서 실제 유저와 섞이지 않게 한다.
+           ================================================================== */
+        function isDemoStudent(s) { return !!(s && s.isAiGenerated); }
+        function isDemoPost(p) { return !(p && p.isReal); }
+
+        /* 실제 유저가 쓴 글/댓글의 작성자 정보.
+           지금까지 게시글 카드는 작성자를 목업 students 배열에서만 찾았다. 실제 유저의 글에는
+           그 배열에 대응하는 항목이 없으니 매번 "Unknown"으로 떴다 — 서비스에서 가장 중요한
+           "이 사람이 누구인가"가 통째로 비어 있던 셈이다. 실제 유저 디렉터리에서 찾아 채운다.
+           값은 원문 그대로 돌려준다(렌더러가 escapeHTML로 감싸므로 여기서 감싸면 두 번 이스케이프된다). */
+        function realAuthorProfile(uid) {
+            if (!uid) return null;
+            const u = (window.__REAL_STUDENTS || []).find(x => x.uid === uid);
+            if (!u) return null;
+            return {
+                id: 'real-' + u.uid,
+                uid: u.uid,
+                isReal: true,
+                name: u.name || 'Unily Member',
+                university: u.university || '',
+                major: u.major || '',
+                country: u.country || '',
+                flag: u.country ? flagForCountry(u.country) : '',
+                badgeGradient: gradientForUid(u.uid)
+            };
+        }
+        // 게시글/댓글 하나의 작성자를 찾는다 — 실제 유저면 디렉터리에서, 예시 글이면 목업 배열에서.
+        function postAuthorOf(item) {
+            if (!item) return null;
+            if (item.isReal && item.authorUid) return realAuthorProfile(item.authorUid);
+            return students.find(s => s.id === item.authorId) || null;
+        }
+        // 프로필 모달은 allStudentCards()에서 카드를 찾는데, 카드를 비공개로 해뒀거나 차단한
+        // 상대는 그 목록에 없다. 열리지도 않을 클릭을 붙여두면 "눌러도 아무 일 없는" 화면이 된다.
+        function isProfileOpenable(id) {
+            return !!id && allStudentCards().some(c => c.id === id);
+        }
+
+        const DEMO_SECTION_TEXT = {
+            students_title: { ko: '예시 프로필', en: 'Example profiles', fr: 'Profils d’exemple', es: 'Perfiles de ejemplo', de: 'Beispielprofile', ja: 'サンプルプロフィール', 'zh-CN': '示例档案' },
+            students_desc: {
+                ko: '아직 학생이 많지 않아서, 서비스가 어떻게 보이는지 알 수 있도록 예시 프로필을 함께 보여드려요. 실제 학생이 아니에요.',
+                en: 'UNILY is still growing, so these example profiles show how it works. They are not real students.',
+                fr: 'UNILY se développe encore : ces profils d’exemple montrent le fonctionnement. Ce ne sont pas de vrais étudiants.',
+                es: 'UNILY aún está creciendo; estos perfiles de ejemplo muestran cómo funciona. No son estudiantes reales.',
+                de: 'UNILY wächst noch — diese Beispielprofile zeigen, wie es funktioniert. Es sind keine echten Studierenden.',
+                ja: 'UNILYはまだ成長中です。使い方が分かるようサンプルプロフィールを表示しています。実在の学生ではありません。',
+                'zh-CN': 'UNILY 还在成长中，这些示例档案用于展示功能，并非真实学生。'
+            },
+            posts_title: { ko: '예시 게시글', en: 'Example posts', fr: 'Publications d’exemple', es: 'Publicaciones de ejemplo', de: 'Beispielbeiträge', ja: 'サンプル投稿', 'zh-CN': '示例帖子' },
+            posts_desc: {
+                ko: '커뮤니티가 어떻게 쓰이는지 보여주는 예시예요. 실제 학생이 쓴 글이 아니에요.',
+                en: 'Examples of how the community is used. Not written by real students.',
+                fr: 'Exemples d’utilisation de la communauté. Non rédigés par de vrais étudiants.',
+                es: 'Ejemplos de uso de la comunidad. No escritos por estudiantes reales.',
+                de: 'Beispiele für die Nutzung der Community. Nicht von echten Studierenden verfasst.',
+                ja: 'コミュニティの使われ方を示す例です。実在の学生が書いた投稿ではありません。',
+                'zh-CN': '展示社区用法的示例，并非真实学生所写。'
+            },
+            real_count: {
+                ko: '지금 UNILY에 있는 학생 {n}명',
+                en: '{n} students on UNILY right now',
+                fr: '{n} étudiants sur UNILY actuellement',
+                es: '{n} estudiantes en UNILY ahora mismo',
+                de: 'Aktuell {n} Studierende auf UNILY',
+                ja: '現在UNILYにいる学生 {n}名',
+                'zh-CN': '目前 UNILY 上有 {n} 名学生'
+            },
+            real_empty: {
+                ko: '아직 이 조건에 맞는 학생이 없어요. 첫 번째 학생이 되어보세요.',
+                en: 'No students match this yet. Be the first one here.',
+                fr: 'Aucun étudiant ne correspond encore. Soyez le premier.',
+                es: 'Todavía no hay estudiantes que coincidan. Sé el primero.',
+                de: 'Noch keine passenden Studierenden. Sei die oder der Erste.',
+                ja: 'まだ条件に合う学生がいません。最初の一人になってみませんか。',
+                'zh-CN': '还没有符合条件的学生。成为第一个吧。'
+            }
+        };
+        function demoText(key) {
+            const d = DEMO_SECTION_TEXT[key];
+            return d ? (d[currentLang] || d.en) : key;
+        }
+
+        // 실제 유저 / 예시를 시각적으로 갈라주는 구분선. 숫자를 부풀리지 않으면서도
+        // 화면이 비어 보이지 않게 하는 타협점이다.
+        function demoDividerHTML(titleKey, descKey) {
+            return `
+              <div class="demo-divider">
+                <div class="demo-divider-title">${escapeHTML(demoText(titleKey))}</div>
+                <div class="demo-divider-desc">${escapeHTML(demoText(descKey))}</div>
+              </div>`;
+        }
+
         function render() {
             const country = fCountry.value;
             const major = fMajor.value;
@@ -4290,13 +4448,20 @@
                 if (dreamCountry && !(s.dreamExchangeCountries || []).includes(dreamCountry)) return false;
                 return true;
             });
+            const realCards = filtered.filter(s => !isDemoStudent(s));
+            const demoCards = filtered.filter(isDemoStudent);
 
-            const resultTemplate = t('총 {n}명의 학생을 찾았어요');
-            resultCount.innerHTML = resultTemplate.includes('{n}')
-                ? resultTemplate.replace('{n}', `<strong>${filtered.length}</strong>`)
-                : `<strong>${filtered.length}</strong> ${resultTemplate}`;
+            // 헤드라인 숫자는 실제 학생만 센다. 예시 프로필까지 합쳐서 "총 16명"이라고 말하면
+            // 그건 없는 규모를 지어내는 것이다.
+            resultCount.innerHTML = demoText('real_count').replace('{n}', `<strong>${realCards.length}</strong>`);
 
-            grid.innerHTML = filtered.map(s => studentCardHTML(s)).join('');
+            const realHTML = realCards.length
+                ? realCards.map(s => studentCardHTML(s)).join('')
+                : `<div class="explore-empty">${escapeHTML(demoText('real_empty'))}</div>`;
+            const demoHTML = demoCards.length
+                ? demoDividerHTML('students_title', 'students_desc') + demoCards.map(s => studentCardHTML(s)).join('')
+                : '';
+            grid.innerHTML = realHTML + demoHTML;
         }
 
         // 실제 유저 디렉터리(window.__REAL_STUDENTS)가 실시간으로 바뀔 때마다(새로 온보딩을
@@ -8210,6 +8375,10 @@
                 else if (sort === 'commented') list.sort((a, b) => countPostComments(b) - countPostComments(a));
                 else if (sort === 'trending') list.sort((a, b) => trendingScore(b) - trendingScore(a));
                 else list.sort((a, b) => b.createdAt - a.createdAt);
+                // 어떤 정렬이든 실제 글이 위, 예시 글이 아래로 가게 한 번 더 정렬한다.
+                // (JS sort는 안정 정렬이라 위에서 정한 순서는 그룹 안에서 그대로 유지된다.)
+                // 예시 글이 시간순으로 실제 글 사이에 끼어 있으면 방금 누가 쓴 글처럼 보인다.
+                list.sort((a, b) => (isDemoPost(a) ? 1 : 0) - (isDemoPost(b) ? 1 : 0));
                 return withDelay(list);
             }
             function createPost(data) {
@@ -8319,23 +8488,29 @@
                 }
                 return withDelay(true);
             }
+            // 트렌딩/인기 학생은 "지금 이 서비스에서 실제로 일어나는 일"을 말하는 위젯이다.
+            // 예시 게시글로 이 숫자를 채우면 없는 활동을 지어내는 것이므로, 실제 글만 센다.
+            // 실제 글이 없으면 빈 목록을 돌려주고 화면은 정직한 빈 상태를 보여준다.
             function getTrendingTopics() {
                 const counts = {};
-                COMMUNITY_POSTS.forEach(p => (p.tags || []).forEach(tag => { counts[tag] = (counts[tag] || 0) + 1; }));
+                (window.__REAL_POSTS || []).forEach(p => (p.tags || []).forEach(tag => { counts[tag] = (counts[tag] || 0) + 1; }));
                 const list = Object.keys(counts).map(tag => ({ tag, count: counts[tag] })).sort((a, b) => b.count - a.count).slice(0, 6);
                 return withDelay(list);
             }
+            // 실제 글을 쓴 실제 학생만 집계한다(글 3점 + 받은 댓글 1점). 예시 학생은 제외 —
+            // "인기 학생"은 실제 활동을 보여주는 자리여야 한다.
             function getPopularStudents() {
                 const scores = {};
-                COMMUNITY_POSTS.forEach(p => {
-                    if (typeof p.authorId === 'number') scores[p.authorId] = (scores[p.authorId] || 0) + 3;
-                    (p.comments || []).forEach(c => {
-                        if (typeof c.authorId === 'number') scores[c.authorId] = (scores[c.authorId] || 0) + 1;
-                        (c.replies || []).forEach(r => { if (typeof r.authorId === 'number') scores[r.authorId] = (scores[r.authorId] || 0) + 1; });
-                    });
+                (window.__REAL_POSTS || []).forEach(p => {
+                    if (!p.authorUid) return;
+                    scores[p.authorUid] = (scores[p.authorUid] || 0) + 3;
+                });
+                (window.__REAL_POST_COMMENTS || []).forEach(c => {
+                    if (!c.authorUid) return;
+                    scores[c.authorUid] = (scores[c.authorUid] || 0) + 1;
                 });
                 const list = Object.keys(scores)
-                    .map(id => ({ student: students.find(s => s.id === Number(id)), score: scores[id] }))
+                    .map(uid => ({ student: realAuthorProfile(uid), score: scores[uid] }))
                     .filter(x => x.student)
                     .sort((a, b) => b.score - a.score)
                     .slice(0, 5);
@@ -8451,7 +8626,6 @@
         const POSTS_PAGE_SIZE = 5;
         const showOriginalSet = new Set();
         let pendingReplyTarget = null;
-        let pendingNewPosts = [];
         let currentDetailPostId = null;
 
         function getCurrentUserDisplay() {
@@ -8540,17 +8714,19 @@
         // 게시글 상세 화면의 댓글 하나(및 답글)를 그린다. 작성자의 국가/학교/전공까지 보여주고,
         // 본인이 쓴 댓글(authorId==='me')에는 삭제 버튼을 추가로 노출한다.
         function renderCommentHTML(comment, postId, isReply) {
-            const author = students.find(s => s.id === comment.authorId);
+            const author = postAuthorOf(comment);
             const isMe = isMine(comment);
-            const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${author ? author.badgeGradient : 'var(--indigo)'};`;
+            const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${escapeHTML(author ? author.badgeGradient : 'var(--indigo)')};`;
             const avatarInitial = isMe ? (comment.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
             const displayName = isMe ? (comment.authorName || 'You') : (author ? author.name : 'Unknown');
-            const clickableProfile = !isMe && author;
-            const clickableChat = !isMe && comment.isReal && !!comment.authorUid;
+            const clickableProfile = !isMe && author && isProfileOpenable(author.id);
+            const clickableChat = !isMe && !clickableProfile && comment.isReal && !!comment.authorUid;
             const authorClickAttr = clickableProfile
-                ? `onclick="openStudentProfile(${author.id})"`
-                : (clickableChat ? `onclick="startChatFromComment('${postId}','${comment.id}')"` : '');
-            const metaLine = author ? `${author.flag} ${author.university} · ${t(author.major)}` : '';
+                ? `onclick="openStudentProfile(${idLiteral(author.id)})"`
+                : (clickableChat ? `onclick="startChatFromComment('${jsAttrString(postId)}','${jsAttrString(comment.id)}')"` : '');
+            const metaLine = author
+                ? [author.flag, author.university, author.major ? t(author.major) : ''].filter(Boolean).join(' · ')
+                : '';
             const liked = isCommentLiked(comment.id);
             const shownOriginal = showOriginalSet.has('comment:' + comment.id);
             const sameLang = comment.lang === currentLang;
@@ -8587,18 +8763,23 @@
         }
 
         function renderPostCardHTML(post) {
-            const author = students.find(s => s.id === post.authorId);
+            const author = postAuthorOf(post);
             const isMe = isMine(post);
-            const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${author ? author.badgeGradient : 'var(--indigo)'};`;
+            const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${escapeHTML(author ? author.badgeGradient : 'var(--indigo)')};`;
             const avatarInitial = isMe ? (post.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
             const displayName = isMe ? (post.authorName || 'You') : (author ? author.name : 'Unknown');
-            const clickableProfile = !isMe && author;
-            const clickableChat = !isMe && post.isReal && !!post.authorUid;
+            // 프로필을 열 수 있으면 프로필 먼저(누구인지 보는 게 먼저다), 카드를 비공개로 해둔
+            // 유저라면 예전처럼 바로 대화 시작으로 떨어뜨린다 — 기존 동작을 잃지 않게.
+            const clickableProfile = !isMe && author && isProfileOpenable(author.id);
+            const clickableChat = !isMe && !clickableProfile && post.isReal && !!post.authorUid;
             const authorClickAttr = clickableProfile
-                ? `onclick="event.stopPropagation(); openStudentProfile(${author.id})"`
-                : (clickableChat ? `onclick="event.stopPropagation(); startChatFromPost('${post.id}')"` : '');
+                ? `onclick="event.stopPropagation(); openStudentProfile(${idLiteral(author.id)})"`
+                : (clickableChat ? `onclick="event.stopPropagation(); startChatFromPost('${jsAttrString(post.id)}')"` : '');
             const metaParts = [];
-            if (author) { metaParts.push(author.university); metaParts.push(t(author.major)); }
+            if (author) {
+                if (author.university) metaParts.push(author.university);
+                if (author.major) metaParts.push(t(author.major));
+            }
             const metaLine = metaParts.join(' · ');
             const catInfo = categoryByKey(post.categoryKey);
 
@@ -8693,8 +8874,20 @@
                     return;
                 }
                 emptyEl.style.display = 'none';
-                feedEl.innerHTML = toShow.map(p => renderPostCardHTML(p)).join('');
+                // 실제 글과 예시 글 사이에 구분선을 넣는다 — 둘이 한 줄기로 이어지면
+                // 예시가 실제 활동처럼 읽힌다.
+                let html = '';
+                let dividerInserted = false;
+                toShow.forEach(p => {
+                    if (!dividerInserted && isDemoPost(p)) {
+                        html += demoDividerHTML('posts_title', 'posts_desc');
+                        dividerInserted = true;
+                    }
+                    html += renderPostCardHTML(p);
+                });
+                feedEl.innerHTML = html;
                 loadingEl.style.display = renderedCount < filtered.length ? 'block' : 'none';
+                noteRenderedFeedPosts(toShow);
                 queueTranslations(toShow);
             });
         }
@@ -8924,9 +9117,9 @@
             CommunityService.getPostDetail(currentDetailPostId).then(post => {
                 if (!post) { showPage('community'); return; }
 
-                const author = students.find(s => s.id === post.authorId);
+                const author = postAuthorOf(post);
                 const isMe = isMine(post);
-                const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${author ? author.badgeGradient : 'var(--indigo)'};`;
+                const avatarStyle = isMe ? 'background:linear-gradient(135deg,var(--indigo),var(--mint));' : `background:${escapeHTML(author ? author.badgeGradient : 'var(--indigo)')};`;
                 const avatarInitial = isMe ? (post.authorInitial || 'U') : (author ? author.name.charAt(0) : '?');
                 const displayName = isMe ? (post.authorName || 'You') : (author ? author.name : 'Unknown');
                 const catInfo = categoryByKey(post.categoryKey);
@@ -8945,7 +9138,10 @@
                 document.getElementById('detailBody').textContent = bodyText;
 
                 const canChat = !isMe && post.isReal && !!post.authorUid;
-                const onAuthorClick = author ? (() => openStudentProfile(author.id)) : (canChat ? (() => startChatWithUser(post.authorUid, post.authorName)) : null);
+                const canOpenProfile = !!author && isProfileOpenable(author.id);
+                const onAuthorClick = canOpenProfile
+                    ? (() => openStudentProfile(author.id))
+                    : (canChat ? (() => startChatWithUser(post.authorUid, post.authorName)) : null);
 
                 document.getElementById('detailAvatar').style.cssText = avatarStyle;
                 document.getElementById('detailAvatar').textContent = avatarInitial;
@@ -8984,8 +9180,9 @@
                 const homeInfo = author ? HOME_COUNTRY_INFO[author.country] : null;
                 const metaLines = [];
                 if (author && homeInfo) metaLines.push(`${author.flag} ${homeInfo.names[currentLang] || homeInfo.names.en}`);
-                if (author) metaLines.push(escapeHTML(author.university));
-                if (author) metaLines.push(escapeHTML(t(author.major)));
+                // 값이 없는 줄은 아예 넣지 않는다 — 빈 줄이 남으면 "정보가 비어 보이는" 프로필이 된다.
+                if (author && author.university) metaLines.push(escapeHTML(author.university));
+                if (author && author.major) metaLines.push(escapeHTML(t(author.major)));
                 if (!sameLang) {
                     const langNames = COMMUNITY_LANGUAGE_NAMES[post.lang] || COMMUNITY_LANGUAGE_NAMES.en;
                     const viewerNames = COMMUNITY_LANGUAGE_NAMES[currentLang] || COMMUNITY_LANGUAGE_NAMES.en;
@@ -9308,42 +9505,48 @@
             if (panel && panel.classList.contains('active')) renderNotifPanel();
         };
 
-        /* ---------- REAL-TIME 시뮬레이션 (실제 서버 없이 "새 글/알림"을 흉내) ---------- */
-        const REALTIME_INCOMING_POOL = [
-            { authorId: 2, lang: 'pt', categoryKey: 'random', title: 'Alguém mais está assistindo o campeonato?', body: 'Alguém mais está assistindo o campeonato de futebol na sala comum? 😄', tags: ['Random', 'Football'] },
-            { authorId: 7, lang: 'fr', categoryKey: 'culture', title: 'Des recommandations de films pour ce week-end ?', body: "Quelqu'un a des recommandations de films français à regarder ce week-end ?", tags: ['Culture', 'Movies'] },
-            { authorId: 13, lang: 'en', categoryKey: 'questions', title: 'Anyone in the same statistics course?', body: 'Anyone taking the same statistics course this term? Would love a study group.', tags: ['Questions', 'StudyGroup'] },
-            { authorId: 16, lang: 'zh-CN', categoryKey: 'food', title: '食堂新出的麻辣香锅真好吃!', body: '食堂新出的麻辣香锅真好吃,大家吃了吗?', tags: ['Food'] },
-            { authorId: 6, lang: 'ja', categoryKey: 'travel', title: '来週韓国に旅行に行きます!', body: '来週韓国に旅行に行きます!おすすめの場所があれば教えてください。', tags: ['Travel', 'Korea'] }
-        ];
-        let incomingPoolIndex = 0;
+        /* ---------- 새 글 배너 (실제 유입만) ----------
+           예전에는 30초마다 미리 적어둔 외국어 글을 하나씩 피드에 흘려보내 "지금도 사람들이
+           글을 쓰고 있다"는 인상을 만들었다. 실제로는 아무도 쓰지 않았는데도 그렇게 보였다 —
+           지어낸 활동이라 걷어낸다. 대신 배너는 진짜로 쓰임새가 있는 자리에 다시 붙인다:
+           다른 유저가 올린 실제 새 글이 도착했는데 내가 피드를 내려서 읽는 중이면, 읽던 자리를
+           흔들지 않고 "새 글 N개"만 띄우고 누를 때 반영한다. */
+        let pendingRealPostCount = 0;
 
         function updateNewPostsBanner() {
             const banner = document.getElementById('newPostsBanner');
             if (!banner) return;
-            if (pendingNewPosts.length === 0) { banner.style.display = 'none'; return; }
+            if (pendingRealPostCount === 0) { banner.style.display = 'none'; return; }
             banner.style.display = 'block';
-            banner.textContent = newPostsBannerText(pendingNewPosts.length);
+            banner.textContent = newPostsBannerText(pendingRealPostCount);
         }
-        function simulateIncomingPost() {
-            const template = REALTIME_INCOMING_POOL[incomingPoolIndex % REALTIME_INCOMING_POOL.length];
-            incomingPoolIndex++;
-            pendingNewPosts.push(Object.assign({}, template, {
-                id: 'rt' + Date.now(), likes: 0, views: Math.floor(Math.random() * 40) + 5, createdAt: Date.now(), comments: []
-            }));
+
+        // 지금 피드에 그려둔 글 중 가장 최신 시각. 이보다 새 글이 들어오면 "새 글"로 센다.
+        let feedNewestRenderedAt = 0;
+        function noteRenderedFeedPosts(posts) {
+            posts.forEach(p => { if (p.createdAt > feedNewestRenderedAt) feedNewestRenderedAt = p.createdAt; });
+        }
+        // 실제 글 구독이 갱신될 때 호출. 피드 맨 위를 보고 있으면 그냥 다시 그리고(배너가 필요 없다),
+        // 내려서 읽는 중이면 배너만 띄운다.
+        function handleIncomingRealPosts() {
+            const fresh = (window.__REAL_POSTS || []).filter(p => p.createdAt > feedNewestRenderedAt);
+            const myUid = window.__myUid ? window.__myUid() : null;
+            const fromOthers = fresh.filter(p => p.authorUid !== myUid);
+            if (fromOthers.length === 0 || window.scrollY < 300) {
+                pendingRealPostCount = 0;
+                updateNewPostsBanner();
+                return false;
+            }
+            pendingRealPostCount = fromOthers.length;
             updateNewPostsBanner();
+            return true;
         }
         function applyNewPosts() {
-            if (pendingNewPosts.length === 0) return;
-            COMMUNITY_POSTS = [...pendingNewPosts.slice().reverse(), ...COMMUNITY_POSTS];
-            pendingNewPosts = [];
+            pendingRealPostCount = 0;
             updateNewPostsBanner();
-            renderCategories();
             renderTrending();
             renderFeed(true);
-        }
-        function realtimeTick() {
-            simulateIncomingPost();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         /* ---------- 언어 전환 시 Community 화면도 함께 갱신 ---------- */
@@ -9389,7 +9592,6 @@
             });
             document.getElementById('composerSubmitBtn').addEventListener('click', submitPost);
 
-            setInterval(realtimeTick, 30000);
         }
 
         // Firestore posts 컬렉션이 실시간으로 바뀔 때(다른 유저의 새 글/댓글/좋아요 포함)
@@ -9397,8 +9599,14 @@
         window.__onRealPostsChange = function () {
             const communityPage = document.getElementById('page-community');
             if (communityPage && communityPage.classList.contains('active')) {
-                try { renderFeed(false); } catch (err) { console.error(err); }
+                // 읽던 위치를 흔들지 않기 위해, 내려서 읽는 중에 남의 새 글이 오면 배너만 띄운다.
+                let heldBack = false;
+                try { heldBack = handleIncomingRealPosts(); } catch (err) { console.error(err); }
+                if (!heldBack) {
+                    try { renderFeed(false); } catch (err) { console.error(err); }
+                }
                 try { renderTrending(); } catch (err) { console.error(err); }
+                try { renderPopularStudents(); } catch (err) { console.error(err); }
             }
             const detailPage = document.getElementById('page-post-detail');
             if (currentDetailPostId && detailPage && detailPage.classList.contains('active')) {
