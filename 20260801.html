@@ -1868,6 +1868,71 @@
   .activity-comment-post{ font-size:11.5px; color:var(--indigo-deep); font-weight:600; margin-bottom:4px; }
   .activity-comment-time{ font-size:11px; color:var(--ink-soft); }
 
+  /* 활동 탭: 항목 메뉴 → 상세. 예전엔 게시글·댓글·좋아요 목록을 한 화면에 통째로 펼쳐서
+     활동이 쌓일수록 스크롤만 길어졌다. 이제 항목으로 들어가서 본다. */
+  .activity-menu{ display:flex; flex-direction:column; gap:8px; }
+  .activity-menu-item{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    background:var(--bg-alt); border:1px solid var(--line); border-radius:var(--radius-md);
+    padding:14px 16px; cursor:pointer; transition:background .15s ease, box-shadow .15s ease;
+  }
+  .activity-menu-item:hover{ background:#fff; box-shadow:0 10px 20px -14px rgba(90,70,220,.35); }
+  .activity-menu-icon{
+    width:36px; height:36px; flex:0 0 36px; border-radius:12px; background:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:17px;
+    border:1px solid var(--line);
+  }
+  .activity-menu-label{ flex:1; min-width:0; font-size:14px; font-weight:600; color:var(--ink); }
+  .activity-menu-count{
+    font-size:12px; font-weight:700; color:var(--indigo-deep);
+    background:#fff; border:1px solid var(--line); border-radius:100px; padding:2px 10px;
+  }
+  .activity-menu-chevron{ font-size:15px; color:var(--ink-soft); }
+
+  .activity-detail-head{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .activity-back-btn{
+    display:flex; align-items:center; gap:6px; background:none; border:none; cursor:pointer;
+    font-size:13px; font-weight:600; color:var(--ink-soft); padding:6px 10px 6px 0;
+  }
+  .activity-back-btn:hover{ color:var(--indigo-deep); }
+  .activity-detail-title{ font-size:15px; font-weight:700; color:var(--ink); }
+
+  .activity-report-item{
+    display:block; width:100%; text-align:left; background:var(--bg-alt); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:12px 16px; transition:background .15s ease;
+  }
+  button.activity-report-item{ cursor:pointer; }
+  button.activity-report-item:hover{ background:#fff; box-shadow:0 10px 20px -14px rgba(90,70,220,.35); }
+  .activity-report-head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+  .activity-report-reason{ font-size:13px; font-weight:700; color:var(--ink); }
+  .activity-report-badge{
+    font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:100px;
+    background:#FDE9EF; color:#E24E76;
+  }
+  .activity-report-status{
+    font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:100px;
+    background:var(--bg-alt); border:1px solid var(--line); color:var(--ink-soft);
+  }
+  .activity-report-target{ font-size:12px; color:var(--indigo-deep); font-weight:600; margin-bottom:4px; }
+  .activity-report-time{ font-size:11px; color:var(--ink-soft); }
+
+  .activity-blocked-item{
+    display:flex; align-items:center; gap:12px; background:var(--bg-alt); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:12px 16px;
+  }
+  .activity-blocked-avatar{
+    width:36px; height:36px; flex:0 0 36px; border-radius:50%; color:#fff; font-weight:700;
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+  }
+  .activity-blocked-info{ flex:1; min-width:0; }
+  .activity-blocked-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
+  .activity-blocked-sub{ font-size:11.5px; color:var(--ink-soft); }
+  .activity-unblock-btn{
+    background:#fff; border:1px solid var(--line); border-radius:100px; padding:7px 14px;
+    font-size:12px; font-weight:700; color:var(--indigo-deep); cursor:pointer; white-space:nowrap;
+  }
+  .activity-unblock-btn:hover{ border-color:var(--indigo); }
+
   .edit-avatar-row{ display:flex; align-items:center; gap:16px; margin-bottom:24px; }
   .edit-avatar-row .profile-avatar-lg{ margin:0; }
   .edit-avatar-row label.btn-reset{ cursor:pointer; }
@@ -2508,18 +2573,18 @@
                 </div>
             </div>
 
+            <!-- 활동 탭은 항목 메뉴(활동 종류 + 개수)만 먼저 보여주고, 누르면 그 항목만 펼친다.
+                 목록 내용은 전부 renderActivityTab()이 그린다. -->
             <div class="mypage-tab-panel" id="mypage-panel-activity">
-                <div class="mypage-activity-section">
-                    <div class="community-side-title" data-i18n="activity_my_posts">작성한 게시글</div>
-                    <div id="activityPostsList" class="related-posts-list"></div>
-                </div>
-                <div class="mypage-activity-section">
-                    <div class="community-side-title" data-i18n="activity_my_comments">작성한 댓글</div>
-                    <div id="activityCommentsList" class="activity-comments-list"></div>
-                </div>
-                <div class="mypage-activity-section">
-                    <div class="community-side-title" data-i18n="activity_liked_posts">좋아요 받은 게시글</div>
-                    <div id="activityLikedList" class="related-posts-list"></div>
+                <div id="activityMenu" class="activity-menu"></div>
+                <div id="activityDetail" style="display:none;">
+                    <div class="activity-detail-head">
+                        <button type="button" class="activity-back-btn" onclick="backToActivityMenu()">
+                            <span aria-hidden="true">←</span><span id="activityBackLabel">활동</span>
+                        </button>
+                        <span class="activity-detail-title" id="activityDetailTitle"></span>
+                    </div>
+                    <div id="activityDetailBody"></div>
                 </div>
             </div>
 
@@ -6961,28 +7026,200 @@
         function switchMyPageTab(tabKey) {
             document.querySelectorAll('.mypage-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabKey));
             document.querySelectorAll('.mypage-tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'mypage-panel-' + tabKey));
+            // 활동 탭은 항상 항목 메뉴부터 보여준다 — 지난번에 들어갔던 상세가 그대로 열려 있으면
+            // 탭을 다시 눌렀을 때 어디에 있는지 헷갈린다.
+            if (tabKey === 'activity') {
+                activityView = 'menu';
+                renderActivityTab();
+            }
         }
 
-        /* ---------- 활동 / 저장한 글 ---------- */
-        function renderActivityTab() {
-            CommunityService.getUserPosts('me').then(posts => {
-                const postsEl = document.getElementById('activityPostsList');
-                postsEl.innerHTML = posts.length ? posts.map(p => postCardPreviewHTML(p)).join('') : `<div class="related-posts-empty">${activityEmptyText('posts')}</div>`;
+        /* ---------- 활동 / 저장한 글 ----------
+           활동 탭은 "항목 메뉴 → 상세" 두 단계다. 예전에는 게시글·댓글·좋아요 목록을 한 화면에
+           통째로 펼쳐서, 활동이 쌓일수록 스크롤만 길어지고 뭘 몇 개 했는지 한눈에 안 들어왔다. */
+        const ACTIVITY_TEXT = {
+            menu_posts: { ko: '작성한 게시글', en: 'My posts', fr: 'Mes publications', es: 'Mis publicaciones', de: 'Meine Beiträge', ja: '投稿した記事', 'zh-CN': '我的帖子' },
+            menu_comments: { ko: '작성한 댓글', en: 'My comments', fr: 'Mes commentaires', es: 'Mis comentarios', de: 'Meine Kommentare', ja: '書いたコメント', 'zh-CN': '我的评论' },
+            menu_liked: { ko: '좋아요 받은 게시글', en: 'Liked posts', fr: 'Publications aimées', es: 'Publicaciones con me gusta', de: 'Beiträge mit Gefällt mir', ja: 'いいねされた投稿', 'zh-CN': '获赞的帖子' },
+            menu_reports: { ko: '신고한 내역', en: 'Reports I filed', fr: 'Mes signalements', es: 'Mis denuncias', de: 'Meine Meldungen', ja: '通報した履歴', 'zh-CN': '我的举报' },
+            menu_blocked: { ko: '차단한 사용자', en: 'Blocked users', fr: 'Utilisateurs bloqués', es: 'Usuarios bloqueados', de: 'Blockierte Nutzer', ja: 'ブロックしたユーザー', 'zh-CN': '已屏蔽的用户' },
+            back: { ko: '활동', en: 'Activity', fr: 'Activité', es: 'Actividad', de: 'Aktivität', ja: 'アクティビティ', 'zh-CN': '动态' },
+            empty_reports: { ko: '아직 신고한 내역이 없어요.', en: 'You have not reported anything yet.', fr: "Vous n'avez encore rien signalé.", es: 'Aún no has denunciado nada.', de: 'Du hast noch nichts gemeldet.', ja: 'まだ通報した履歴がありません。', 'zh-CN': '还没有举报记录。' },
+            empty_blocked: { ko: '차단한 사용자가 없어요.', en: 'No blocked users.', fr: 'Aucun utilisateur bloqué.', es: 'No has bloqueado a nadie.', de: 'Keine blockierten Nutzer.', ja: 'ブロックしたユーザーはいません。', 'zh-CN': '没有已屏蔽的用户。' },
+            report_post: { ko: '게시글 신고', en: 'Post report', fr: 'Signalement de publication', es: 'Denuncia de publicación', de: 'Beitragsmeldung', ja: '投稿の通報', 'zh-CN': '帖子举报' },
+            report_comment: { ko: '댓글 신고', en: 'Comment report', fr: 'Signalement de commentaire', es: 'Denuncia de comentario', de: 'Kommentarmeldung', ja: 'コメントの通報', 'zh-CN': '评论举报' },
+            report_received: { ko: '접수됨', en: 'Received', fr: 'Reçu', es: 'Recibida', de: 'Eingegangen', ja: '受付済み', 'zh-CN': '已受理' },
+            report_gone: { ko: '삭제되었거나 찾을 수 없는 글', en: 'Content deleted or unavailable', fr: 'Contenu supprimé ou introuvable', es: 'Contenido eliminado o no disponible', de: 'Inhalt gelöscht oder nicht verfügbar', ja: '削除されたか見つからない投稿', 'zh-CN': '内容已删除或不可用' },
+            unblock: { ko: '차단 해제', en: 'Unblock', fr: 'Débloquer', es: 'Desbloquear', de: 'Freigeben', ja: 'ブロック解除', 'zh-CN': '解除屏蔽' },
+            blocked_sub: { ko: '메시지와 탐색 목록에서 숨겨져 있어요', en: 'Hidden from messages and Explore', fr: 'Masqué des messages et de la recherche', es: 'Oculto en mensajes y exploración', de: 'In Nachrichten und Entdecken ausgeblendet', ja: 'メッセージと探索から非表示です', 'zh-CN': '已在消息和探索中隐藏' },
+            unknown_user: { ko: '알 수 없는 사용자', en: 'Unknown user', fr: 'Utilisateur inconnu', es: 'Usuario desconocido', de: 'Unbekannter Nutzer', ja: '不明なユーザー', 'zh-CN': '未知用户' }
+        };
+        function activityText(key) {
+            const d = ACTIVITY_TEXT[key];
+            return d ? (d[currentLang] || d.en) : key;
+        }
 
-                const liked = posts.filter(p => p.likes > 0).sort((a, b) => b.likes - a.likes);
-                const likedEl = document.getElementById('activityLikedList');
-                likedEl.innerHTML = liked.length ? liked.map(p => postCardPreviewHTML(p)).join('') : `<div class="related-posts-empty">${activityEmptyText('liked')}</div>`;
-            });
-            CommunityService.getUserComments('me').then(entries => {
-                const el = document.getElementById('activityCommentsList');
-                el.innerHTML = entries.length ? entries.map(({ comment, post }) => `
-                  <button class="activity-comment-item" onclick="openPostDetail('${post.id}')">
-                    <div class="activity-comment-text">${escapeHTML(comment.text)}</div>
-                    <div class="activity-comment-post">${escapeHTML(post.title || post.body)}</div>
-                    <div class="activity-comment-time">${relativeTimeLabel(comment.createdAt)}</div>
-                  </button>
-                `).join('') : `<div class="related-posts-empty">${activityEmptyText('comments')}</div>`;
-            });
+        // 'menu'이거나 ACTIVITY_MENU의 key 중 하나.
+        let activityView = 'menu';
+        // 메뉴에 개수를 바로 띄우려면 목록을 미리 받아둬야 한다. 상세로 들어갈 때 다시 받지 않도록
+        // 여기에 담아두고, 탭에 들어올 때마다 갱신한다.
+        let activityData = { posts: [], comments: [], reports: [] };
+        const ACTIVITY_MENU = [
+            { key: 'posts', icon: '📝' },
+            { key: 'comments', icon: '💬' },
+            { key: 'liked', icon: '❤️' },
+            { key: 'reports', icon: '🚩' },
+            { key: 'blocked', icon: '🚫' }
+        ];
+
+        function activityCount(key) {
+            if (key === 'posts') return activityData.posts.length;
+            if (key === 'comments') return activityData.comments.length;
+            if (key === 'liked') return activityData.posts.filter(p => p.likes > 0).length;
+            if (key === 'reports') return activityData.reports.length;
+            if (key === 'blocked') return (window.__myBlockedUids || []).length;
+            return 0;
+        }
+
+        function openActivityView(key) {
+            activityView = key;
+            paintActivityTab();
+            const panel = document.getElementById('mypage-panel-activity');
+            if (panel) panel.scrollIntoView({ block: 'nearest' });
+        }
+        function backToActivityMenu() {
+            activityView = 'menu';
+            paintActivityTab();
+        }
+
+        function activityMenuHTML() {
+            return ACTIVITY_MENU.map(item => `
+              <button type="button" class="activity-menu-item" onclick="openActivityView('${item.key}')">
+                <span class="activity-menu-icon" aria-hidden="true">${item.icon}</span>
+                <span class="activity-menu-label">${escapeHTML(activityText('menu_' + item.key))}</span>
+                <span class="activity-menu-count">${activityCount(item.key)}</span>
+                <span class="activity-menu-chevron" aria-hidden="true">›</span>
+              </button>
+            `).join('');
+        }
+
+        function activityCommentsHTML() {
+            const entries = activityData.comments;
+            if (!entries.length) return `<div class="related-posts-empty">${escapeHTML(activityEmptyText('comments'))}</div>`;
+            return `<div class="activity-comments-list">${entries.map(({ comment, post }) => `
+              <button class="activity-comment-item" onclick="openPostDetail('${jsAttrString(post.id)}')">
+                <div class="activity-comment-text">${escapeHTML(comment.text)}</div>
+                <div class="activity-comment-post">${escapeHTML(post.title || post.body)}</div>
+                <div class="activity-comment-time">${relativeTimeLabel(comment.createdAt)}</div>
+              </button>
+            `).join('')}</div>`;
+        }
+
+        // 신고 내역: 운영자 화면이 없어 상태는 항상 "접수됨"이다. 신고 대상 글이 아직 있으면
+        // 눌러서 그 글로 갈 수 있고, 지워졌으면 그렇게 표시한다.
+        function activityReportsHTML() {
+            const reports = activityData.reports;
+            if (!reports.length) return `<div class="related-posts-empty">${escapeHTML(activityText('empty_reports'))}</div>`;
+            return `<div class="activity-comments-list">${reports.map(r => {
+                const postId = r.type === 'post' ? r.targetId : r.postId;
+                const post = postId ? CommunityService.getPostSync(postId) : null;
+                const label = activityText(r.type === 'post' ? 'report_post' : 'report_comment');
+                const body = `
+                    <div class="activity-report-head">
+                      <span class="activity-report-reason">${escapeHTML(reportReasonText(r.reason))}</span>
+                      <span class="activity-report-badge">${escapeHTML(label)}</span>
+                      <span class="activity-report-status">${escapeHTML(activityText('report_received'))}</span>
+                    </div>
+                    <div class="activity-report-target">${escapeHTML(post ? (post.title || post.body) : activityText('report_gone'))}</div>
+                    <div class="activity-report-time">${relativeTimeLabel(r.createdAt)}</div>`;
+                return post
+                    ? `<button type="button" class="activity-report-item" onclick="openPostDetail('${jsAttrString(post.id)}')">${body}</button>`
+                    : `<div class="activity-report-item">${body}</div>`;
+            }).join('')}</div>`;
+        }
+
+        // 차단 목록: uid만 저장돼 있으므로 표시 이름은 실제 프로필(users 문서)에서 찾는다.
+        function activityBlockedHTML() {
+            const blocked = window.__myBlockedUids || [];
+            if (!blocked.length) return `<div class="related-posts-empty">${escapeHTML(activityText('empty_blocked'))}</div>`;
+            return `<div class="activity-comments-list">${blocked.map(uid => {
+                const profile = (window.__REAL_STUDENTS || []).find(u => u.uid === uid);
+                const name = (profile && profile.name) || activityText('unknown_user');
+                const sub = profile && profile.university ? profile.university : activityText('blocked_sub');
+                return `
+                  <div class="activity-blocked-item">
+                    <div class="activity-blocked-avatar" style="background:${escapeHTML(gradientForUid(uid))}">${escapeHTML(initialsOf(name))}</div>
+                    <div class="activity-blocked-info">
+                      <div class="activity-blocked-name">${escapeHTML(name)}</div>
+                      <div class="activity-blocked-sub">${escapeHTML(sub)}</div>
+                    </div>
+                    <button type="button" class="activity-unblock-btn" onclick="unblockUserFromActivity('${jsAttrString(uid)}')">${escapeHTML(activityText('unblock'))}</button>
+                  </div>`;
+            }).join('')}</div>`;
+        }
+
+        function activityDetailHTML(key) {
+            if (key === 'posts') {
+                const posts = activityData.posts;
+                return posts.length
+                    ? `<div class="related-posts-list">${posts.map(p => postCardPreviewHTML(p)).join('')}</div>`
+                    : `<div class="related-posts-empty">${escapeHTML(activityEmptyText('posts'))}</div>`;
+            }
+            if (key === 'liked') {
+                const liked = activityData.posts.filter(p => p.likes > 0).sort((a, b) => b.likes - a.likes);
+                return liked.length
+                    ? `<div class="related-posts-list">${liked.map(p => postCardPreviewHTML(p)).join('')}</div>`
+                    : `<div class="related-posts-empty">${escapeHTML(activityEmptyText('liked'))}</div>`;
+            }
+            if (key === 'comments') return activityCommentsHTML();
+            if (key === 'reports') return activityReportsHTML();
+            if (key === 'blocked') return activityBlockedHTML();
+            return '';
+        }
+
+        function paintActivityTab() {
+            const menuEl = document.getElementById('activityMenu');
+            const detailEl = document.getElementById('activityDetail');
+            if (!menuEl || !detailEl) return;
+            const backLabel = document.getElementById('activityBackLabel');
+            if (backLabel) backLabel.textContent = activityText('back');
+
+            if (activityView === 'menu') {
+                menuEl.style.display = 'flex';
+                detailEl.style.display = 'none';
+                menuEl.innerHTML = activityMenuHTML();
+                return;
+            }
+            menuEl.style.display = 'none';
+            detailEl.style.display = 'block';
+            document.getElementById('activityDetailTitle').textContent = activityText('menu_' + activityView);
+            document.getElementById('activityDetailBody').innerHTML = activityDetailHTML(activityView);
+        }
+
+        // 목록을 받아오는 동안에도 화면이 비어 보이지 않도록, 지금 가진 값으로 먼저 그린 뒤
+        // 도착하는 대로 다시 그린다(개수 배지가 0에서 채워진다).
+        function renderActivityTab() {
+            paintActivityTab();
+            Promise.all([
+                CommunityService.getUserPosts('me').then(posts => { activityData.posts = posts; }).catch(() => {}),
+                CommunityService.getUserComments('me').then(entries => { activityData.comments = entries; }).catch(() => {}),
+                (window.__fbGetMyReports ? window.__fbGetMyReports() : Promise.resolve([]))
+                    .then(reports => { activityData.reports = reports || []; }).catch(() => {})
+            ]).then(() => paintActivityTab());
+        }
+
+        async function unblockUserFromActivity(uid) {
+            if (!window.__unblockUser) return;
+            try {
+                await window.__unblockUser(uid);
+                showToast(await translateText('차단을 해제했어요.', currentLang));
+                paintActivityTab();
+                if (typeof render === 'function') render();          // 탐색 탭에 카드가 다시 보이도록
+                if (typeof renderMessagesList === 'function') renderMessagesList();
+            } catch (err) {
+                console.error('차단 해제 실패:', err);
+                showToast(await translateText('차단 해제에 실패했어요. 잠시 후 다시 시도해주세요.', currentLang), 'error');
+            }
         }
         function renderSavedPostsTab() {
             CommunityService.getSavedPosts().then(posts => {
@@ -10469,6 +10706,33 @@
       window.__deleteConversation = function (chatId) {
         if (!auth.currentUser) return Promise.resolve();
         return updateDoc(doc(db, "chats", chatId), { deletedFor: arrayUnion(auth.currentUser.uid) });
+      };
+
+      // 차단 해제: 마이페이지 → 활동 → 차단한 사용자에서 호출된다. 차단할 때 대화를 내 목록에서
+      // 숨겼던 것(deletedFor)은 되돌리지 않는다 — 다시 대화를 시작하면 그때 목록에 돌아온다.
+      window.__unblockUser = async function (otherUid) {
+        if (!auth.currentUser) return;
+        await setDoc(doc(db, "users", auth.currentUser.uid), { blockedUids: arrayRemove(otherUid) }, { merge: true });
+        window.__myBlockedUids = (window.__myBlockedUids || []).filter((uid) => uid !== otherUid);
+      };
+
+      // 마이페이지 "신고한 내역" — 내가 신고한 문서만 읽는다(규칙도 reporterUid로 동일하게 제한).
+      // orderBy 없이 받아 클라이언트에서 정렬한다: where + orderBy 조합은 복합 색인을 요구하는데,
+      // 한 사람의 신고 건수는 많아야 수십 건이라 색인을 새로 만들 이유가 없다.
+      window.__fbGetMyReports = async function () {
+        if (!auth.currentUser) return [];
+        try {
+          const snap = await getDocs(query(collection(db, "reports"), where("reporterUid", "==", auth.currentUser.uid)));
+          return snap.docs
+            .map((d) => {
+              const data = d.data();
+              return { id: d.id, ...data, createdAt: toMillis(data.createdAt) };
+            })
+            .sort((a, b) => b.createdAt - a.createdAt);
+        } catch (err) {
+          console.error("신고 내역 조회 실패:", err);
+          return [];
+        }
       };
 
       // 차단: 내 유저 문서에 기록 + 지금 대화도 내 목록에서 즉시 숨긴다.

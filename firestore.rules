@@ -442,8 +442,12 @@ service cloud.firestore {
     }
 
     match /reports/{reportId} {
-      // 신고: 로그인한 사람이 "본인이 신고자"로만 생성 가능. 아직 운영자 화면이 없어서
-      // 읽기/수정/삭제는 전부 막아둔다 - Firebase Console에서 Firestore 데이터로 직접 확인해야 함.
+      // 신고: 로그인한 사람이 "본인이 신고자"로만 생성 가능.
+      // 읽기는 신고한 본인 것만 — 마이페이지 → 활동 → "신고한 내역"이 이 규칙으로 조회한다
+      // (where("reporterUid","==",내 uid) 쿼리만 통과한다). 남의 신고는 여전히 못 본다.
+      // 운영자용 열람 화면은 아직 없어서 전체 조회는 Firebase Console에서 해야 하고,
+      // 수정/삭제는 신고자 본인에게도 막아둔다 — 신고 기록은 남아 있어야 한다.
+      allow read: if authed() && resource.data.reporterUid == request.auth.uid;
       allow create: if authed()
         && request.resource.data.reporterUid == request.auth.uid
         && request.resource.data.type in ['post', 'comment']
@@ -454,7 +458,7 @@ service cloud.firestore {
         && strOk(request.resource.data, 'targetId', 200)
         && strOk(request.resource.data, 'postId', 200)
         && request.resource.data.status == 'open';
-      allow read, update, delete: if false;
+      allow update, delete: if false;
     }
 
     // 아직 정의되지 않은 다른 모든 컬렉션은 기본적으로 차단.
