@@ -2995,12 +2995,8 @@
                 delete_account_confirm_btn: "계정 영구 삭제",
                 delete_account_cancel_btn: "취소",
                 tab_activity: "활동",
-                tab_saved_posts: "저장한 글",
                 tab_edit_profile: "프로필 수정",
                 tab_settings: "설정",
-                activity_my_posts: "작성한 게시글",
-                activity_my_comments: "작성한 댓글",
-                activity_liked_posts: "좋아요 받은 게시글",
                 edit_change_photo: "사진 변경",
                 edit_name_label: "이름",
                 edit_bio_label: "자기소개",
@@ -3130,12 +3126,8 @@
                 delete_account_confirm_btn: "Permanently Delete Account",
                 delete_account_cancel_btn: "Cancel",
                 tab_activity: "Activity",
-                tab_saved_posts: "Saved Posts",
                 tab_edit_profile: "Edit Profile",
                 tab_settings: "Settings",
-                activity_my_posts: "Posts",
-                activity_my_comments: "Comments",
-                activity_liked_posts: "Liked Posts",
                 edit_change_photo: "Change Photo",
                 edit_name_label: "Name",
                 edit_bio_label: "Bio",
@@ -6978,7 +6970,6 @@
             const d = {
                 posts: { ko: '아직 작성한 게시글이 없어요.', en: 'No posts yet.', fr: "Vous n'avez pas encore publié de post.", es: 'Aún no has publicado nada.', de: 'Noch keine Beiträge verfasst.', ja: 'まだ投稿がありません。', 'zh-CN': '还没有发布过帖子。' },
                 comments: { ko: '아직 작성한 댓글이 없어요.', en: 'No comments yet.', fr: "Vous n'avez pas encore commenté.", es: 'Aún no has comentado nada.', de: 'Noch keine Kommentare verfasst.', ja: 'まだコメントがありません。', 'zh-CN': '还没有发表过评论。' },
-                liked: { ko: '아직 좋아요를 받은 게시글이 없어요.', en: 'No liked posts yet.', fr: "Aucune publication n'a encore reçu de like.", es: 'Ninguna publicación ha recibido "me gusta" todavía.', de: 'Noch keine Beiträge mit Gefällt mir.', ja: 'まだいいねされた投稿がありません。', 'zh-CN': '还没有帖子获得点赞。' },
                 saved: { ko: '아직 저장한 게시글이 없어요.', en: 'No saved posts yet.', fr: "Vous n'avez pas encore enregistré de publication.", es: 'Aún no has guardado ninguna publicación.', de: 'Noch keine gespeicherten Beiträge.', ja: 'まだ保存した投稿がありません。', 'zh-CN': '还没有收藏的帖子。' }
             };
             const dict = d[kind] || d.posts;
@@ -7034,8 +7025,8 @@
         const ACTIVITY_TEXT = {
             menu_posts: { ko: '작성한 게시글', en: 'My posts', fr: 'Mes publications', es: 'Mis publicaciones', de: 'Meine Beiträge', ja: '投稿した記事', 'zh-CN': '我的帖子' },
             menu_comments: { ko: '작성한 댓글', en: 'My comments', fr: 'Mes commentaires', es: 'Mis comentarios', de: 'Meine Kommentare', ja: '書いたコメント', 'zh-CN': '我的评论' },
-            menu_liked: { ko: '좋아요 받은 게시글', en: 'Liked posts', fr: 'Publications aimées', es: 'Publicaciones con me gusta', de: 'Beiträge mit Gefällt mir', ja: 'いいねされた投稿', 'zh-CN': '获赞的帖子' },
             menu_saved: { ko: '저장한 글', en: 'Saved posts', fr: 'Publications enregistrées', es: 'Publicaciones guardadas', de: 'Gespeicherte Beiträge', ja: '保存した投稿', 'zh-CN': '收藏的帖子' },
+            menu_moderation: { ko: '신고/차단 내역', en: 'Reports & blocks', fr: 'Signalements et blocages', es: 'Denuncias y bloqueos', de: 'Meldungen & Blockierungen', ja: '通報・ブロック履歴', 'zh-CN': '举报与屏蔽' },
             menu_reports: { ko: '신고한 내역', en: 'Reports I filed', fr: 'Mes signalements', es: 'Mis denuncias', de: 'Meine Meldungen', ja: '通報した履歴', 'zh-CN': '我的举报' },
             menu_blocked: { ko: '차단한 사용자', en: 'Blocked users', fr: 'Utilisateurs bloqués', es: 'Usuarios bloqueados', de: 'Blockierte Nutzer', ja: 'ブロックしたユーザー', 'zh-CN': '已屏蔽的用户' },
             back: { ko: '활동', en: 'Activity', fr: 'Activité', es: 'Actividad', de: 'Aktivität', ja: 'アクティビティ', 'zh-CN': '动态' },
@@ -7062,8 +7053,12 @@
         const ACTIVITY_MENU = [
             { key: 'posts', icon: '📝' },
             { key: 'comments', icon: '💬' },
-            { key: 'liked', icon: '❤️' },
             { key: 'saved', icon: '🔖' },
+            { key: 'moderation', icon: '🛡️' }
+        ];
+        // 신고와 차단은 성격이 같아(내가 누군가를 문제 삼은 기록) 한 항목으로 묶고,
+        // 그 안에서 신고 따로 차단 따로 들어가게 한다.
+        const MODERATION_MENU = [
             { key: 'reports', icon: '🚩' },
             { key: 'blocked', icon: '🚫' }
         ];
@@ -7071,10 +7066,10 @@
         function activityCount(key) {
             if (key === 'posts') return activityData.posts.length;
             if (key === 'comments') return activityData.comments.length;
-            if (key === 'liked') return activityData.posts.filter(p => p.likes > 0).length;
             if (key === 'saved') return activityData.saved.length;
             if (key === 'reports') return activityData.reports.length;
             if (key === 'blocked') return (window.__myBlockedUids || []).length;
+            if (key === 'moderation') return activityCount('reports') + activityCount('blocked');
             return 0;
         }
 
@@ -7084,20 +7079,26 @@
             const panel = document.getElementById('mypage-panel-activity');
             if (panel) panel.scrollIntoView({ block: 'nearest' });
         }
+        // 한 단계만 올라간다: 신고/차단 목록에서는 묶음 화면으로, 그 외에는 항목 메뉴로.
+        function activityParentView() {
+            return (activityView === 'reports' || activityView === 'blocked') ? 'moderation' : 'menu';
+        }
         function backToActivityMenu() {
-            activityView = 'menu';
+            activityView = activityParentView();
             paintActivityTab();
         }
 
-        function activityMenuHTML() {
-            return ACTIVITY_MENU.map(item => `
+        function activityMenuItemHTML(item) {
+            return `
               <button type="button" class="activity-menu-item" onclick="openActivityView('${item.key}')">
                 <span class="activity-menu-icon" aria-hidden="true">${item.icon}</span>
                 <span class="activity-menu-label">${escapeHTML(activityText('menu_' + item.key))}</span>
                 <span class="activity-menu-count">${activityCount(item.key)}</span>
                 <span class="activity-menu-chevron" aria-hidden="true">›</span>
-              </button>
-            `).join('');
+              </button>`;
+        }
+        function activityMenuHTML() {
+            return ACTIVITY_MENU.map(activityMenuItemHTML).join('');
         }
 
         function activityCommentsHTML() {
@@ -7162,11 +7163,8 @@
                     ? `<div class="related-posts-list">${posts.map(p => postCardPreviewHTML(p)).join('')}</div>`
                     : `<div class="related-posts-empty">${escapeHTML(activityEmptyText('posts'))}</div>`;
             }
-            if (key === 'liked') {
-                const liked = activityData.posts.filter(p => p.likes > 0).sort((a, b) => b.likes - a.likes);
-                return liked.length
-                    ? `<div class="related-posts-list">${liked.map(p => postCardPreviewHTML(p)).join('')}</div>`
-                    : `<div class="related-posts-empty">${escapeHTML(activityEmptyText('liked'))}</div>`;
+            if (key === 'moderation') {
+                return `<div class="activity-menu">${MODERATION_MENU.map(activityMenuItemHTML).join('')}</div>`;
             }
             if (key === 'saved') {
                 const saved = activityData.saved;
@@ -7185,7 +7183,12 @@
             const detailEl = document.getElementById('activityDetail');
             if (!menuEl || !detailEl) return;
             const backLabel = document.getElementById('activityBackLabel');
-            if (backLabel) backLabel.textContent = activityText('back');
+            // 뒤로 가기 버튼에는 "어디로 돌아가는지"를 적는다 — 신고/차단 목록에서는 묶음 화면 이름.
+            if (backLabel) {
+                backLabel.textContent = activityParentView() === 'moderation'
+                    ? activityText('menu_moderation')
+                    : activityText('back');
+            }
 
             if (activityView === 'menu') {
                 menuEl.style.display = 'flex';

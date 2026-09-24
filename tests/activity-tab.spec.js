@@ -1,7 +1,8 @@
 const { test, expect, gotoApp, loginAs } = require('./fixtures');
 
-// 마이페이지 "활동" 탭: 항목 메뉴(작성한 게시글/댓글/좋아요/저장한 글/신고/차단) → 상세
-// 두 단계로 동작한다. 예전에는 모든 목록이 한 화면에 펼쳐져 있었고, 저장한 글은 별도 탭이었다.
+// 마이페이지 "활동" 탭: 항목 메뉴(작성한 게시글/댓글/저장한 글/신고·차단 내역) → 상세.
+// 신고와 차단은 "신고/차단 내역" 한 항목으로 묶여 있고, 그 안에서 각각 따로 들어간다.
+// 예전에는 모든 목록이 한 화면에 펼쳐져 있었고, 저장한 글은 별도 탭이었다.
 async function openActivityTab(page) {
   await gotoApp(page);
   await loginAs(page, { uid: 'me', name: 'Test User' });
@@ -22,20 +23,46 @@ test.describe('마이페이지 활동 탭', () => {
   test('항목 메뉴가 먼저 보이고, 목록은 펼쳐져 있지 않다', async ({ page }) => {
     await openActivityTab(page);
 
-    await expect(page.locator('#activityMenu .activity-menu-item')).toHaveCount(6);
+    await expect(page.locator('#activityMenu .activity-menu-item')).toHaveCount(4);
     await expect(page.locator('#activityDetail')).toBeHidden();
+    const labels = await page.locator('#activityMenu .activity-menu-label').allTextContents();
+    expect(labels).toEqual(['작성한 게시글', '작성한 댓글', '저장한 글', '신고/차단 내역']);
     // 저장한 글은 더 이상 별도 탭이 아니라 이 메뉴 안에 있다.
     await expect(page.locator('.mypage-tab[data-tab="saved"]')).toHaveCount(0);
-    await expect(page.locator('.activity-menu-item', { hasText: '저장한 글' })).toBeVisible();
-    // 개수 배지는 데이터가 도착하면 채워진다 (신고 2건, 차단 1명).
-    await expect(page.locator('.activity-menu-item', { hasText: '신고한 내역' }).locator('.activity-menu-count')).toHaveText('2');
-    await expect(page.locator('.activity-menu-item', { hasText: '차단한 사용자' }).locator('.activity-menu-count')).toHaveText('1');
+    // 묶음 항목의 개수 배지는 신고 2건 + 차단 1명 = 3.
+    await expect(page.locator('.activity-menu-item', { hasText: '신고/차단 내역' }).locator('.activity-menu-count')).toHaveText('3');
+  });
+
+  test('신고/차단 내역 안에서 신고와 차단으로 따로 들어간다', async ({ page }) => {
+    await openActivityTab(page);
+
+    await page.click('.activity-menu-item:has-text("신고/차단 내역")');
+    await expect(page.locator('#activityDetailTitle')).toHaveText('신고/차단 내역');
+    const sub = page.locator('#activityDetailBody .activity-menu-item');
+    await expect(sub).toHaveCount(2);
+    await expect(sub.nth(0)).toContainText('신고한 내역');
+    await expect(sub.nth(0).locator('.activity-menu-count')).toHaveText('2');
+    await expect(sub.nth(1)).toContainText('차단한 사용자');
+    await expect(sub.nth(1).locator('.activity-menu-count')).toHaveText('1');
+
+    // 신고로 들어갔다가 뒤로 가면 항목 메뉴가 아니라 묶음 화면으로 돌아온다.
+    await sub.nth(0).click();
+    await expect(page.locator('#activityDetailTitle')).toHaveText('신고한 내역');
+    await expect(page.locator('#activityBackLabel')).toHaveText('신고/차단 내역');
+    await page.click('.activity-back-btn');
+    await expect(page.locator('#activityDetailTitle')).toHaveText('신고/차단 내역');
+    await expect(page.locator('#activityMenu')).toBeHidden();
+
+    // 묶음 화면에서 한 번 더 뒤로 가면 항목 메뉴.
+    await page.click('.activity-back-btn');
+    await expect(page.locator('#activityMenu')).toBeVisible();
   });
 
   test('신고한 내역으로 들어가면 사유·대상이 보이고, 뒤로 가면 메뉴로 돌아온다', async ({ page }) => {
     await openActivityTab(page);
 
-    await page.click('.activity-menu-item:has-text("신고한 내역")');
+    await page.click('.activity-menu-item:has-text("신고/차단 내역")');
+    await page.click('#activityDetailBody .activity-menu-item:has-text("신고한 내역")');
     await expect(page.locator('#activityDetail')).toBeVisible();
     await expect(page.locator('#activityMenu')).toBeHidden();
     await expect(page.locator('#activityDetailTitle')).toHaveText('신고한 내역');
@@ -47,14 +74,14 @@ test.describe('마이페이지 활동 탭', () => {
     await expect(items.nth(1)).toContainText('삭제되었거나');         // 지워진 글은 그렇게 표시
 
     await page.click('.activity-back-btn');
-    await expect(page.locator('#activityMenu')).toBeVisible();
-    await expect(page.locator('#activityDetail')).toBeHidden();
+    await expect(page.locator('#activityDetailTitle')).toHaveText('신고/차단 내역');
   });
 
   test('차단한 사용자 목록에 이름과 차단 해제 버튼이 있다', async ({ page }) => {
     await openActivityTab(page);
 
-    await page.click('.activity-menu-item:has-text("차단한 사용자")');
+    await page.click('.activity-menu-item:has-text("신고/차단 내역")');
+    await page.click('#activityDetailBody .activity-menu-item:has-text("차단한 사용자")');
     const row = page.locator('#activityDetailBody .activity-blocked-item');
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('Mallory');
@@ -71,7 +98,8 @@ test.describe('마이페이지 활동 탭', () => {
       };
     });
 
-    await page.click('.activity-menu-item:has-text("차단한 사용자")');
+    await page.click('.activity-menu-item:has-text("신고/차단 내역")');
+    await page.click('#activityDetailBody .activity-menu-item:has-text("차단한 사용자")');
     await page.click('.activity-unblock-btn');
 
     await expect(page.locator('#activityDetailBody .activity-blocked-item')).toHaveCount(0);
