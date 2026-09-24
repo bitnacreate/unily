@@ -2084,7 +2084,7 @@
                             </div>
                         </div>
                         <div class="stat stat-uni-hover" id="countryHoverTrigger" onclick="openCountryDirectory()" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="연결된 국가 목록 보기" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); this.click();}">
-                            <div class="stat-num">20</div>
+                            <div class="stat-num" id="statCountryNum">37</div>
                             <div class="stat-label" data-i18n="stat_3">연결된 국가</div>
                             <div class="stat-hover-popover" role="tooltip">
                                 <svg class="stat-popover-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
@@ -6351,6 +6351,26 @@
             { code: 'SE', flag: '🇸🇪', uniCount: 25, names: { ko: '스웨덴', en: 'Sweden', fr: 'Suède', es: 'Suecia', de: 'Schweden', ja: 'スウェーデン', 'zh-CN': '瑞典' } },
             { code: 'ES', flag: '🇪🇸', uniCount: 40, names: { ko: '스페인', en: 'Spain', fr: 'Espagne', es: 'España', de: 'Spanien', ja: 'スペイン', 'zh-CN': '西班牙' } },
             { code: 'IT', flag: '🇮🇹', uniCount: 45, names: { ko: '이탈리아', en: 'Italy', fr: 'Italie', es: 'Italia', de: 'Italien', ja: 'イタリア', 'zh-CN': '意大利' } },
+            // 아래 17개국은 등록된 대학 목록(top_1200_universities.json)에는 있는데 이 목록에는
+            // 빠져 있던 나라들이다. 중복 없이 합쳐서 "연결된 국가"가 등록 대학이 있는 나라 전체(37개)와
+            // 일치하게 한다. uniCount는 그 파일에 실제로 들어있는 대학 수를 그대로 썼다.
+            { code: 'RU', flag: '🇷🇺', uniCount: 25, names: { ko: '러시아', en: 'Russia', fr: 'Russie', es: 'Rusia', de: 'Russland', ja: 'ロシア', 'zh-CN': '俄罗斯' } },
+            { code: 'BE', flag: '🇧🇪', uniCount: 20, names: { ko: '벨기에', en: 'Belgium', fr: 'Belgique', es: 'Bélgica', de: 'Belgien', ja: 'ベルギー', 'zh-CN': '比利时' } },
+            { code: 'MX', flag: '🇲🇽', uniCount: 15, names: { ko: '멕시코', en: 'Mexico', fr: 'Mexique', es: 'México', de: 'Mexiko', ja: 'メキシコ', 'zh-CN': '墨西哥' } },
+            { code: 'PL', flag: '🇵🇱', uniCount: 15, names: { ko: '폴란드', en: 'Poland', fr: 'Pologne', es: 'Polonia', de: 'Polen', ja: 'ポーランド', 'zh-CN': '波兰' } },
+            { code: 'ID', flag: '🇮🇩', uniCount: 15, names: { ko: '인도네시아', en: 'Indonesia', fr: 'Indonésie', es: 'Indonesia', de: 'Indonesien', ja: 'インドネシア', 'zh-CN': '印度尼西亚' } },
+            { code: 'TR', flag: '🇹🇷', uniCount: 15, names: { ko: '튀르키예', en: 'Turkey', fr: 'Turquie', es: 'Turquía', de: 'Türkei', ja: 'トルコ', 'zh-CN': '土耳其' } },
+            { code: 'PT', flag: '🇵🇹', uniCount: 15, names: { ko: '포르투갈', en: 'Portugal', fr: 'Portugal', es: 'Portugal', de: 'Portugal', ja: 'ポルトガル', 'zh-CN': '葡萄牙' } },
+            { code: 'IE', flag: '🇮🇪', uniCount: 15, names: { ko: '아일랜드', en: 'Ireland', fr: 'Irlande', es: 'Irlanda', de: 'Irland', ja: 'アイルランド', 'zh-CN': '爱尔兰' } },
+            { code: 'AT', flag: '🇦🇹', uniCount: 12, names: { ko: '오스트리아', en: 'Austria', fr: 'Autriche', es: 'Austria', de: 'Österreich', ja: 'オーストリア', 'zh-CN': '奥地利' } },
+            { code: 'DK', flag: '🇩🇰', uniCount: 12, names: { ko: '덴마크', en: 'Denmark', fr: 'Danemark', es: 'Dinamarca', de: 'Dänemark', ja: 'デンマーク', 'zh-CN': '丹麦' } },
+            { code: 'FI', flag: '🇫🇮', uniCount: 10, names: { ko: '핀란드', en: 'Finland', fr: 'Finlande', es: 'Finlandia', de: 'Finnland', ja: 'フィンランド', 'zh-CN': '芬兰' } },
+            { code: 'NO', flag: '🇳🇴', uniCount: 10, names: { ko: '노르웨이', en: 'Norway', fr: 'Norvège', es: 'Noruega', de: 'Norwegen', ja: 'ノルウェー', 'zh-CN': '挪威' } },
+            { code: 'IL', flag: '🇮🇱', uniCount: 10, names: { ko: '이스라엘', en: 'Israel', fr: 'Israël', es: 'Israel', de: 'Israel', ja: 'イスラエル', 'zh-CN': '以色列' } },
+            { code: 'ZA', flag: '🇿🇦', uniCount: 5, names: { ko: '남아프리카공화국', en: 'South Africa', fr: 'Afrique du Sud', es: 'Sudáfrica', de: 'Südafrika', ja: '南アフリカ', 'zh-CN': '南非' } },
+            { code: 'AR', flag: '🇦🇷', uniCount: 5, names: { ko: '아르헨티나', en: 'Argentina', fr: 'Argentine', es: 'Argentina', de: 'Argentinien', ja: 'アルゼンチン', 'zh-CN': '阿根廷' } },
+            { code: 'MY', flag: '🇲🇾', uniCount: 5, names: { ko: '말레이시아', en: 'Malaysia', fr: 'Malaisie', es: 'Malasia', de: 'Malaysia', ja: 'マレーシア', 'zh-CN': '马来西亚' } },
+            { code: 'TH', flag: '🇹🇭', uniCount: 5, names: { ko: '태국', en: 'Thailand', fr: 'Thaïlande', es: 'Tailandia', de: 'Thailand', ja: 'タイ', 'zh-CN': '泰国' } },
         ];
 
         // 이름을 countryName()으로 지으면 안 된다 — 이미 위쪽(line ~3502)에 같은 이름의
@@ -7464,6 +7484,10 @@
 
         // 초기화 함수
         window.addEventListener('DOMContentLoaded', () => {
+            // 히어로의 "연결된 국가" 숫자는 목록(COUNTRY_DIRECTORY)에서 직접 센다 — 마크업에 숫자를
+            // 박아두면 국가를 추가했을 때 숫자와 목록이 어긋난다(실제로 20으로 굳어 있었다).
+            const statCountryEl = document.getElementById('statCountryNum');
+            if (statCountryEl) statCountryEl.textContent = COUNTRY_DIRECTORY.length;
             populateDreamCountryFilter();
             render();
             renderMessagesList();
