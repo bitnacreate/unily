@@ -2524,7 +2524,6 @@
             <div class="mypage-tabs" id="mypageTabs">
                 <button class="mypage-tab active" data-tab="edit" onclick="switchMyPageTab('edit')" data-i18n="tab_edit_profile">프로필 수정</button>
                 <button class="mypage-tab" data-tab="activity" onclick="switchMyPageTab('activity')" data-i18n="tab_activity">활동</button>
-                <button class="mypage-tab" data-tab="saved" onclick="switchMyPageTab('saved')" data-i18n="tab_saved_posts">저장한 글</button>
                 <button class="mypage-tab" data-tab="settings" onclick="switchMyPageTab('settings')" data-i18n="tab_settings">설정</button>
             </div>
 
@@ -2586,10 +2585,6 @@
                     </div>
                     <div id="activityDetailBody"></div>
                 </div>
-            </div>
-
-            <div class="mypage-tab-panel" id="mypage-panel-saved">
-                <div id="savedPostsList" class="related-posts-list"></div>
             </div>
 
             <div class="mypage-tab-panel" id="mypage-panel-settings">
@@ -7013,7 +7008,6 @@
             refreshMyPageCardPreview();
 
             renderActivityTab();
-            renderSavedPostsTab();
             populateEditProfileForm();
             renderSettingsTab();
         }
@@ -7041,6 +7035,7 @@
             menu_posts: { ko: '작성한 게시글', en: 'My posts', fr: 'Mes publications', es: 'Mis publicaciones', de: 'Meine Beiträge', ja: '投稿した記事', 'zh-CN': '我的帖子' },
             menu_comments: { ko: '작성한 댓글', en: 'My comments', fr: 'Mes commentaires', es: 'Mis comentarios', de: 'Meine Kommentare', ja: '書いたコメント', 'zh-CN': '我的评论' },
             menu_liked: { ko: '좋아요 받은 게시글', en: 'Liked posts', fr: 'Publications aimées', es: 'Publicaciones con me gusta', de: 'Beiträge mit Gefällt mir', ja: 'いいねされた投稿', 'zh-CN': '获赞的帖子' },
+            menu_saved: { ko: '저장한 글', en: 'Saved posts', fr: 'Publications enregistrées', es: 'Publicaciones guardadas', de: 'Gespeicherte Beiträge', ja: '保存した投稿', 'zh-CN': '收藏的帖子' },
             menu_reports: { ko: '신고한 내역', en: 'Reports I filed', fr: 'Mes signalements', es: 'Mis denuncias', de: 'Meine Meldungen', ja: '通報した履歴', 'zh-CN': '我的举报' },
             menu_blocked: { ko: '차단한 사용자', en: 'Blocked users', fr: 'Utilisateurs bloqués', es: 'Usuarios bloqueados', de: 'Blockierte Nutzer', ja: 'ブロックしたユーザー', 'zh-CN': '已屏蔽的用户' },
             back: { ko: '활동', en: 'Activity', fr: 'Activité', es: 'Actividad', de: 'Aktivität', ja: 'アクティビティ', 'zh-CN': '动态' },
@@ -7063,11 +7058,12 @@
         let activityView = 'menu';
         // 메뉴에 개수를 바로 띄우려면 목록을 미리 받아둬야 한다. 상세로 들어갈 때 다시 받지 않도록
         // 여기에 담아두고, 탭에 들어올 때마다 갱신한다.
-        let activityData = { posts: [], comments: [], reports: [] };
+        let activityData = { posts: [], comments: [], saved: [], reports: [] };
         const ACTIVITY_MENU = [
             { key: 'posts', icon: '📝' },
             { key: 'comments', icon: '💬' },
             { key: 'liked', icon: '❤️' },
+            { key: 'saved', icon: '🔖' },
             { key: 'reports', icon: '🚩' },
             { key: 'blocked', icon: '🚫' }
         ];
@@ -7076,6 +7072,7 @@
             if (key === 'posts') return activityData.posts.length;
             if (key === 'comments') return activityData.comments.length;
             if (key === 'liked') return activityData.posts.filter(p => p.likes > 0).length;
+            if (key === 'saved') return activityData.saved.length;
             if (key === 'reports') return activityData.reports.length;
             if (key === 'blocked') return (window.__myBlockedUids || []).length;
             return 0;
@@ -7171,6 +7168,12 @@
                     ? `<div class="related-posts-list">${liked.map(p => postCardPreviewHTML(p)).join('')}</div>`
                     : `<div class="related-posts-empty">${escapeHTML(activityEmptyText('liked'))}</div>`;
             }
+            if (key === 'saved') {
+                const saved = activityData.saved;
+                return saved.length
+                    ? `<div class="related-posts-list">${saved.map(p => postCardPreviewHTML(p)).join('')}</div>`
+                    : `<div class="related-posts-empty">${escapeHTML(activityEmptyText('saved'))}</div>`;
+            }
             if (key === 'comments') return activityCommentsHTML();
             if (key === 'reports') return activityReportsHTML();
             if (key === 'blocked') return activityBlockedHTML();
@@ -7203,6 +7206,7 @@
             Promise.all([
                 CommunityService.getUserPosts('me').then(posts => { activityData.posts = posts; }).catch(() => {}),
                 CommunityService.getUserComments('me').then(entries => { activityData.comments = entries; }).catch(() => {}),
+                CommunityService.getSavedPosts().then(posts => { activityData.saved = posts; }).catch(() => {}),
                 (window.__fbGetMyReports ? window.__fbGetMyReports() : Promise.resolve([]))
                     .then(reports => { activityData.reports = reports || []; }).catch(() => {})
             ]).then(() => paintActivityTab());
@@ -7221,12 +7225,8 @@
                 showToast(await translateText('차단 해제에 실패했어요. 잠시 후 다시 시도해주세요.', currentLang), 'error');
             }
         }
-        function renderSavedPostsTab() {
-            CommunityService.getSavedPosts().then(posts => {
-                const el = document.getElementById('savedPostsList');
-                el.innerHTML = posts.length ? posts.map(p => postCardPreviewHTML(p)).join('') : `<div class="related-posts-empty">${activityEmptyText('saved')}</div>`;
-            });
-        }
+        // 저장한 글은 예전엔 마이페이지 최상위 탭(renderSavedPostsTab)이었지만, 이제 활동 탭의
+        // 한 항목이라 renderActivityTab()이 목록까지 같이 받아온다.
 
         /* ---------- 프로필 수정 ---------- */
         let editAvatarDataUrl = null;
@@ -9163,13 +9163,12 @@
                 try { renderPostDetail(); } catch (err) { console.error(err); }
                 try { renderDetailComments(); } catch (err) { console.error(err); }
             }
-            // 마이페이지의 "활동"/"저장한 글" 탭도 allPosts()를 참조하는데, 로그인 직후처럼 아직
+            // 마이페이지의 "활동" 탭(저장한 글 항목 포함)도 allPosts()를 참조하는데, 로그인 직후처럼 아직
             // 마이페이지를 열기 전에 renderMyPageProfile()이 먼저 돌 수 있어(그때는 posts 구독이
             // 막 시작돼 비어있는 상태) 구독 데이터가 도착하는 시점에 다시 그려줘야 정확해진다.
             const mypagePage = document.getElementById('page-mypage');
             if (mypagePage && mypagePage.classList.contains('active') && AuthService.isLoggedIn()) {
                 try { renderActivityTab(); } catch (err) { console.error(err); }
-                try { renderSavedPostsTab(); } catch (err) { console.error(err); }
             }
         };
 

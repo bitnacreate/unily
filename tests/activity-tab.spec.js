@@ -1,7 +1,7 @@
 const { test, expect, gotoApp, loginAs } = require('./fixtures');
 
-// 마이페이지 "활동" 탭: 항목 메뉴(작성한 게시글/댓글/좋아요/신고/차단) → 상세 두 단계로 동작한다.
-// 예전에는 모든 목록이 한 화면에 펼쳐져 있었다.
+// 마이페이지 "활동" 탭: 항목 메뉴(작성한 게시글/댓글/좋아요/저장한 글/신고/차단) → 상세
+// 두 단계로 동작한다. 예전에는 모든 목록이 한 화면에 펼쳐져 있었고, 저장한 글은 별도 탭이었다.
 async function openActivityTab(page) {
   await gotoApp(page);
   await loginAs(page, { uid: 'me', name: 'Test User' });
@@ -22,8 +22,11 @@ test.describe('마이페이지 활동 탭', () => {
   test('항목 메뉴가 먼저 보이고, 목록은 펼쳐져 있지 않다', async ({ page }) => {
     await openActivityTab(page);
 
-    await expect(page.locator('#activityMenu .activity-menu-item')).toHaveCount(5);
+    await expect(page.locator('#activityMenu .activity-menu-item')).toHaveCount(6);
     await expect(page.locator('#activityDetail')).toBeHidden();
+    // 저장한 글은 더 이상 별도 탭이 아니라 이 메뉴 안에 있다.
+    await expect(page.locator('.mypage-tab[data-tab="saved"]')).toHaveCount(0);
+    await expect(page.locator('.activity-menu-item', { hasText: '저장한 글' })).toBeVisible();
     // 개수 배지는 데이터가 도착하면 채워진다 (신고 2건, 차단 1명).
     await expect(page.locator('.activity-menu-item', { hasText: '신고한 내역' }).locator('.activity-menu-count')).toHaveText('2');
     await expect(page.locator('.activity-menu-item', { hasText: '차단한 사용자' }).locator('.activity-menu-count')).toHaveText('1');
@@ -80,5 +83,19 @@ test.describe('마이페이지 활동 탭', () => {
 
     await page.click('.activity-menu-item:has-text("작성한 게시글")');
     await expect(page.locator('#activityDetailBody')).toContainText('아직 작성한 게시글이 없어요');
+  });
+
+  test('저장한 글이 활동 메뉴 안에서 열리고 저장한 글 목록을 보여준다', async ({ page }) => {
+    await openActivityTab(page);
+    // 게시글 하나를 저장해둔 상태를 만든다 (저장 목록은 localStorage 기반).
+    await page.evaluate(async () => {
+      await CommunityService.savePost('p1', true);
+      switchMyPageTab('activity');
+    });
+
+    await expect(page.locator('.activity-menu-item', { hasText: '저장한 글' }).locator('.activity-menu-count')).toHaveText('1');
+    await page.click('.activity-menu-item:has-text("저장한 글")');
+    await expect(page.locator('#activityDetailTitle')).toHaveText('저장한 글');
+    await expect(page.locator('#activityDetailBody')).toContainText('파리 카페');
   });
 });
