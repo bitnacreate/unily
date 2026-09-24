@@ -29,8 +29,9 @@ test.describe('마이페이지 활동 탭', () => {
     expect(labels).toEqual(['작성한 게시글', '작성한 댓글', '저장한 글', '신고/차단 내역']);
     // 저장한 글은 더 이상 별도 탭이 아니라 이 메뉴 안에 있다.
     await expect(page.locator('.mypage-tab[data-tab="saved"]')).toHaveCount(0);
-    // 묶음 항목의 개수 배지는 신고 2건 + 차단 1명 = 3.
-    await expect(page.locator('.activity-menu-item', { hasText: '신고/차단 내역' }).locator('.activity-menu-count')).toHaveText('3');
+    // 아이콘과 개수 배지는 없다 — 항목 이름과 화살표만 둔다.
+    await expect(page.locator('#activityMenu .activity-menu-icon')).toHaveCount(0);
+    await expect(page.locator('#activityMenu .activity-menu-count')).toHaveCount(0);
   });
 
   test('신고/차단 내역 안에서 신고와 차단으로 따로 들어간다', async ({ page }) => {
@@ -41,9 +42,8 @@ test.describe('마이페이지 활동 탭', () => {
     const sub = page.locator('#activityDetailBody .activity-menu-item');
     await expect(sub).toHaveCount(2);
     await expect(sub.nth(0)).toContainText('신고한 내역');
-    await expect(sub.nth(0).locator('.activity-menu-count')).toHaveText('2');
     await expect(sub.nth(1)).toContainText('차단한 사용자');
-    await expect(sub.nth(1).locator('.activity-menu-count')).toHaveText('1');
+    await expect(page.locator('#activityDetailBody .activity-menu-count')).toHaveCount(0);
 
     // 신고로 들어갔다가 뒤로 가면 항목 메뉴가 아니라 묶음 화면으로 돌아온다.
     await sub.nth(0).click();
@@ -121,7 +121,6 @@ test.describe('마이페이지 활동 탭', () => {
       switchMyPageTab('activity');
     });
 
-    await expect(page.locator('.activity-menu-item', { hasText: '저장한 글' }).locator('.activity-menu-count')).toHaveText('1');
     await page.click('.activity-menu-item:has-text("저장한 글")');
     await expect(page.locator('#activityDetailTitle')).toHaveText('저장한 글');
     await expect(page.locator('#activityDetailBody')).toContainText('파리 카페');
