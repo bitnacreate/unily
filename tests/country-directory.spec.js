@@ -43,6 +43,23 @@ test.describe('연결된 국가', () => {
     await expect(page.locator('#countryDirectoryGrid .country-card')).toContainText('아일랜드');
   });
 
+  test('국가별 대학 수가 실제 대학 목록과 일치한다', async ({ page }) => {
+    await gotoApp(page);
+    await page.click('#countryHoverTrigger');
+    // 모달을 열면 원본 데이터(top_1200_universities.json)를 세서 숫자를 맞춘다. 그 조회가 끝나길 기다린다.
+    await page.waitForTimeout(1500);
+    const counts = await page.evaluate(() =>
+      Object.fromEntries(COUNTRY_DIRECTORY.map((c) => [c.code, c.uniCount])));
+
+    const real = {};
+    JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'top_1200_universities.json'), 'utf8'))
+      .forEach((u) => { real[u.country_code] = (real[u.country_code] || 0) + 1; });
+
+    expect(counts).toEqual(real);
+    // 합이 전체 대학 수(1,200)와 같아야 한다 — 하나도 빠지거나 겹치지 않았다는 뜻.
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(1200);
+  });
+
   test('모든 국가 이름이 7개 언어로 정의돼 있다', async ({ page }) => {
     await gotoApp(page);
     const incomplete = await page.evaluate(() => {
