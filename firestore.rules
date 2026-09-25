@@ -69,7 +69,16 @@ service cloud.firestore {
         && (!('interests' in data) || (data.interests is list && data.interests.size() <= 30))
         && (!('dreamExchangeCountries' in data) || (data.dreamExchangeCountries is list && data.dreamExchangeCountries.size() <= 30))
         && (!('blockedUids' in data) || (data.blockedUids is list && data.blockedUids.size() <= 2000))
-        && (!('savedStudents' in data) || (data.savedStudents is list && data.savedStudents.size() <= 2000));
+        && (!('savedStudents' in data) || (data.savedStudents is list && data.savedStudents.size() <= 2000))
+        // "찾고 있는 것" — 정해진 선택지 몇 개뿐이라 10개면 충분하다.
+        && (!('lookingFor' in data) || (data.lookingFor is list && data.lookingFor.size() <= 10))
+        // 프로젝트(제목·설명·역할 등)는 map 하나다. 필드 수와 자유 텍스트 길이에 상한을 둔다.
+        && (!('project' in data) || data.project == null
+            || (data.project is map && data.project.size() <= 12
+                && strOk(data.project, 'title', 200)
+                && strOk(data.project, 'description', 2000)
+                && strOk(data.project, 'category', 60)
+                && (!('roles' in data.project) || (data.project.roles is list && data.project.roles.size() <= 10))));
     }
 
     match /users/{userId} {
@@ -397,7 +406,9 @@ service cloud.firestore {
       allow create: if authed()
         && request.resource.data.actorUid == request.auth.uid
         && request.resource.data.recipientUid != request.auth.uid
-        && (request.resource.data.type == 'connect' || request.resource.data.type == 'project')
+        // connect/project: 요청을 보낼 때, accepted/project_accepted: 요청을 받은 사람이 수락했을 때,
+        // comment: 남의 글에 댓글을 달았을 때. 신원 필드는 아래에서 본인 프로필과 대조한다.
+        && request.resource.data.type in ['connect', 'project', 'accepted', 'project_accepted', 'comment']
         && request.resource.data.read == false
         && strOk(request.resource.data, 'projectTitle', 300)
         && request.resource.data.actorName ==
@@ -407,7 +418,7 @@ service cloud.firestore {
         && request.resource.data.actorMajor ==
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('major', '')
         && request.resource.data.keys().hasOnly(
-             ['recipientUid', 'type', 'actorUid', 'actorName', 'actorUniversity', 'actorMajor', 'chatId', 'read', 'createdAt', 'projectTitle']
+             ['recipientUid', 'type', 'actorUid', 'actorName', 'actorUniversity', 'actorMajor', 'chatId', 'read', 'createdAt', 'projectTitle', 'postId']
            );
 
       // 수정: 받는 사람 본인이 읽음 처리(read)만 할 수 있다.

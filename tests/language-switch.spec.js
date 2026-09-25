@@ -80,7 +80,7 @@ test.describe('언어 전환', () => {
     // 언어를 바꾼 시점에 열어보지도 않았던 커뮤니티 화면
     // (카테고리 이름처럼 7개 언어를 직접 적어둔 문구는 기계 번역을 타지 않으므로 여기선 대상이 아니다)
     await page.click('#nav-community');
-    await expect(page.locator('[data-i18n="community_title"]')).toHaveText('[fr] 글로벌 학생 커뮤니티', { timeout: 15000 });
+    await expect(page.locator('[data-i18n="community_title"]')).toHaveText('[fr] 커뮤니티', { timeout: 15000 });
     // 게시글 본문은 TranslationService(원문 언어 → 현재 언어) 경로를 탄다.
     await expect(page.locator('.post-body').first()).toContainText('[fr]', { timeout: 15000 });
   });
@@ -93,7 +93,7 @@ test.describe('언어 전환', () => {
     await expect(page.locator('#nav-home')).toHaveText('Home');
 
     await page.reload();
-    await page.waitForSelector('#card-grid .student-card');
+    await page.waitForSelector('#card-grid .student-card', { state: 'attached' });
     await expect(page.locator('#nav-home')).toHaveText('Home', { timeout: 5000 });
     await expect(page.locator('#footerLangSelect')).toHaveValue('en');
   });
@@ -192,7 +192,7 @@ test.describe('언어 전환', () => {
       window.fetch = async () => { throw new Error('offline'); };
     });
     await page.reload();
-    await page.waitForSelector('#card-grid .student-card');
+    await page.waitForSelector('#card-grid .student-card', { state: 'attached' });
 
     // 저장된 언어가 복원되면서, 네트워크 없이도 화면이 일본어로 떠야 한다.
     await expect(page.locator('#nav-home')).toHaveText('AI(홈)', { timeout: 10000 });

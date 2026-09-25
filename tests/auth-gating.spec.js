@@ -1,3 +1,5 @@
+
+
 const { test, expect, gotoApp, loginAs, logout } = require('./fixtures');
 
 test.describe('비로그인 상태 게이트', () => {
@@ -24,6 +26,8 @@ test.describe('비로그인 상태 게이트', () => {
 
     // 로그인 상태에서 첫 학생 카드를 저장해둔다.
     await loginAs(page);
+    // 학생 카드는 "발견" 화면에 있다.
+    await page.evaluate(() => navigate('/discover'));
     const firstCard = page.locator('#card-grid .student-card').first();
     await firstCard.locator('.card-fav-btn').click();
     await expect(firstCard.locator('.card-fav-btn')).toHaveClass(/is-saved/);

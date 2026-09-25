@@ -32,7 +32,8 @@ const test = base.extend({
 async function gotoApp(page) {
   await page.goto('/20260801.html');
   // DOMContentLoaded 핸들러(render/checkLoginState 등)가 다 돌 때까지 카드 그리드가 채워지는 걸로 확인.
-  await page.waitForSelector('#card-grid .student-card');
+  // 학생 카드는 이제 홈이 아니라 "발견" 화면에 있어서 첫 화면에서는 보이지 않는다 — DOM에 붙었는지만 본다.
+  await page.waitForSelector('#card-grid .student-card', { state: 'attached' });
 }
 
 /**

@@ -23,6 +23,8 @@
       "package.json",
       "package-lock.json",
       "tests/**",
+      "test-results/**",
+      "playwright-report/**",
       "scripts/**",
       "pitch-assets/**",
       "y/**",
@@ -73,6 +75,24 @@
       },
       {
         "source": "/20260801.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "**/!(*.*)",
         "headers": [
           {
             "key": "Cache-Control",

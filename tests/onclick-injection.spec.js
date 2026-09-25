@@ -54,6 +54,9 @@ test.describe('onclick 속성 텍스트 삽입 회귀 테스트', () => {
     expect(result.joinOnclick).not.toContain('Sarah');
 
     await page.click('#onclick-injection-test-container .card-bottom .btn-connect');
+    // Connect는 이제 바로 요청을 보내지 않고 "Connect 시트"를 연다 — 시트가 열렸는지 확인하고 닫은 뒤 다음 버튼을 누른다.
+    await expect(page.locator('#connectSheetOverlay')).toHaveClass(/active/);
+    await page.keyboard.press('Escape');
     await page.click('#onclick-injection-test-container .project-recruit-box .btn-connect');
     await page.waitForTimeout(200);
 
